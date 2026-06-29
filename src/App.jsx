@@ -176,15 +176,16 @@ const computeKpis = (activities, recruits = []) => {
   const open  = activities.filter((a) => a.result === 'appointment' && a.followUp && new Date(a.followUp) > new Date())
   const totalUnits  = won.reduce((s, d) => s + (d.dealUnits || 0), 0)
   const teamUnits   = recruits.filter((r) => r.status === 'team').reduce((s, r) => s + (r.units || 0), 0)
-  const totalCallsN = calls.reduce((s, a) => s + cnt(a), 0)
-  const notReached  = activities.filter((a) => a.result === 'not_reached').reduce((s, a) => s + cnt(a), 0)
-  const callbacks   = activities.filter((a) => a.result === 'callback').reduce((s, a) => s + cnt(a), 0)
-  const wonN        = won.reduce((s, a) => s + cnt(a), 0)
-  const apptsN      = appts.reduce((s, a) => s + cnt(a), 0)
+  const totalCallsN  = calls.reduce((s, a) => s + cnt(a), 0)
+  const reachedN     = calls.filter((a) => a.result !== 'not_reached').reduce((s, a) => s + cnt(a), 0)
+  const notReached   = activities.filter((a) => a.result === 'not_reached').reduce((s, a) => s + cnt(a), 0)
+  const callbacks    = activities.filter((a) => a.result === 'callback').reduce((s, a) => s + cnt(a), 0)
+  const wonN         = won.reduce((s, a) => s + cnt(a), 0)
+  const apptsN       = appts.reduce((s, a) => s + cnt(a), 0)
   return {
     totalRevenue:     totalUnits * 7 + teamUnits,
-    closeRate:        totalCallsN ? (wonN / totalCallsN) * 100 : 0,
-    appointmentRate:  totalCallsN ? (apptsN / totalCallsN) * 100 : 0,
+    closeRate:        reachedN ? (wonN / reachedN) * 100 : 0,
+    appointmentRate:  reachedN ? (apptsN / reachedN) * 100 : 0,
     totalCalls:       totalCallsN,
     totalUnits,
     openAppointments: open.length,
