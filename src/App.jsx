@@ -310,7 +310,7 @@ const KpiTile = ({ config, value }) => (
 /* ═══════════════════════════════════════════════════════════════════
    COMPONENT: ActivityCard
 ═══════════════════════════════════════════════════════════════════ */
-const ActivityCard = ({ activity, onDelete }) => {
+const ActivityCard = ({ activity, onDelete, onEdit }) => {
   const rb = RESULT_BADGE[activity.result] || {}
   const tb = TYPE_LABEL[activity.type] || {}
   return (
@@ -334,11 +334,18 @@ const ActivityCard = ({ activity, onDelete }) => {
               </a>
             )}
           </div>
-          <button onClick={() => onDelete(activity.id)} style={{
-            background: 'none', border: 'none', cursor: 'pointer', color: '#cbd5e1',
-            fontSize: 16, padding: '4px', flexShrink: 0, lineHeight: 1, borderRadius: 4,
-            minWidth: 28, minHeight: 28, display: 'flex', alignItems: 'center', justifyContent: 'center',
-          }}>✕</button>
+          <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+            <button onClick={() => onEdit(activity)} style={{
+              background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8',
+              fontSize: 14, padding: '4px', lineHeight: 1, borderRadius: 4,
+              minWidth: 28, minHeight: 28, display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}>✏️</button>
+            <button onClick={() => onDelete(activity.id)} style={{
+              background: 'none', border: 'none', cursor: 'pointer', color: '#cbd5e1',
+              fontSize: 16, padding: '4px', lineHeight: 1, borderRadius: 4,
+              minWidth: 28, minHeight: 28, display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}>✕</button>
+          </div>
         </div>
         {activity.note && (
           <div style={{ fontSize: 13, color: '#64748b', marginTop: 4, lineHeight: 1.4 }}>{activity.note}</div>
@@ -369,6 +376,120 @@ const ActivityCard = ({ activity, onDelete }) => {
             📥 In Kalender speichern (.ics)
           </button>
         )}
+      </div>
+    </div>
+  )
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   COMPONENT: EditActivityModal
+═══════════════════════════════════════════════════════════════════ */
+const EditActivityModal = ({ activity, onSave, onClose }) => {
+  const [fields, setFields] = useState({
+    name:        activity.name || '',
+    phone:       activity.phone || '',
+    type:        activity.type || 'call',
+    result:      activity.result || '',
+    dealProduct: activity.dealProduct || '',
+    dealUnits:   activity.dealUnits ?? '',
+    followUp:    activity.followUp || '',
+    note:        activity.note || '',
+  })
+
+  const set = (k) => (e) => setFields((f) => ({ ...f, [k]: e.target.value }))
+
+  const inputStyle = {
+    width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid #e2e8f0',
+    fontSize: 14, color: '#0f172a', outline: 'none', background: '#fff', boxSizing: 'border-box',
+  }
+  const labelStyle = { fontSize: 12, fontWeight: 600, color: '#64748b', marginBottom: 4, display: 'block' }
+
+  return (
+    <div
+      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 9000, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}
+      onClick={onClose}
+    >
+      <div onClick={(e) => e.stopPropagation()} style={{
+        background: '#fff', borderRadius: '20px 20px 0 0', padding: '24px 20px',
+        width: '100%', maxWidth: 560, maxHeight: '88vh', overflowY: 'auto',
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+          <div style={{ fontWeight: 700, fontSize: 16, color: '#0f172a' }}>Aktivität bearbeiten</div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: '#94a3b8', padding: 4, lineHeight: 1 }}>✕</button>
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            <div>
+              <label style={labelStyle}>Name</label>
+              <input style={inputStyle} value={fields.name} onChange={set('name')} placeholder="Name" />
+            </div>
+            <div>
+              <label style={labelStyle}>Telefon</label>
+              <input style={inputStyle} value={fields.phone} onChange={set('phone')} placeholder="+49 …" />
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            <div>
+              <label style={labelStyle}>Typ</label>
+              <select style={inputStyle} value={fields.type} onChange={set('type')}>
+                <option value="call">📞 Anruf</option>
+                <option value="appointment">📅 Termin</option>
+                <option value="deal">🏆 Abschluss</option>
+                <option value="callback">🔄 Rückruf</option>
+              </select>
+            </div>
+            <div>
+              <label style={labelStyle}>Ergebnis</label>
+              <select style={inputStyle} value={fields.result} onChange={set('result')}>
+                <option value="">– kein Ergebnis –</option>
+                <option value="appointment">Termin</option>
+                <option value="callback">Rückruf</option>
+                <option value="not_reached">Nicht erreicht</option>
+                <option value="not_interested">Kein Interesse</option>
+                <option value="won">Gewonnen</option>
+                <option value="lost">Verloren</option>
+              </select>
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            <div>
+              <label style={labelStyle}>Produkt / Dienstleistung</label>
+              <input style={inputStyle} value={fields.dealProduct} onChange={set('dealProduct')} placeholder="z.B. Rentenvorsorge" />
+            </div>
+            <div>
+              <label style={labelStyle}>Einheiten</label>
+              <input style={inputStyle} type="number" min="0" value={fields.dealUnits} onChange={set('dealUnits')} placeholder="0" />
+            </div>
+          </div>
+
+          <div>
+            <label style={labelStyle}>Folgetermin / Datum</label>
+            <input style={inputStyle} type="date" value={fields.followUp} onChange={set('followUp')} />
+          </div>
+
+          <div>
+            <label style={labelStyle}>Notiz</label>
+            <textarea
+              style={{ ...inputStyle, minHeight: 80, resize: 'vertical', fontFamily: 'inherit' }}
+              value={fields.note} onChange={set('note')} placeholder="Notizen …"
+            />
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', gap: 10, marginTop: 20, paddingBottom: 'env(safe-area-inset-bottom)' }}>
+          <button onClick={onClose} style={{
+            flex: 1, padding: '13px', borderRadius: 10, border: '1px solid #e2e8f0',
+            background: '#f8fafc', color: '#64748b', fontWeight: 600, fontSize: 14, cursor: 'pointer',
+          }}>Abbrechen</button>
+          <button onClick={() => { onSave(activity.id, { ...fields, dealUnits: fields.dealUnits !== '' ? Number(fields.dealUnits) : undefined }); onClose() }} style={{
+            flex: 2, padding: '13px', borderRadius: 10, border: 'none',
+            background: 'linear-gradient(135deg, #7c3aed, #6d28d9)', color: '#fff',
+            fontWeight: 700, fontSize: 14, cursor: 'pointer',
+          }}>Speichern</button>
+        </div>
       </div>
     </div>
   )
@@ -474,9 +595,10 @@ const DashboardView = ({ kpis, activities, isMobile, period }) => {
 /* ═══════════════════════════════════════════════════════════════════
    VIEW: Aktivitäten
 ═══════════════════════════════════════════════════════════════════ */
-const ActivitiesView = ({ activities, onDelete }) => {
+const ActivitiesView = ({ activities, onDelete, onEdit }) => {
   const [filter, setFilter] = useState('all')
   const [search, setSearch] = useState('')
+  const [editing, setEditing] = useState(null)
 
   const filters = [
     { key: 'all',  label: 'Alle' },
@@ -533,9 +655,17 @@ const ActivitiesView = ({ activities, onDelete }) => {
             Keine Aktivitäten gefunden.
           </div>
         ) : (
-          filtered.map((a) => <ActivityCard key={a.id} activity={a} onDelete={onDelete} />)
+          filtered.map((a) => <ActivityCard key={a.id} activity={a} onDelete={onDelete} onEdit={setEditing} />)
         )}
       </div>
+
+      {editing && (
+        <EditActivityModal
+          activity={editing}
+          onSave={(id, fields) => { onEdit(id, fields); setEditing(null) }}
+          onClose={() => setEditing(null)}
+        />
+      )}
     </div>
   )
 }
@@ -1174,6 +1304,10 @@ export default function App() {
     persist({ ...data, activities: data.activities.filter((a) => a.id !== id) })
   }, [data, persist])
 
+  const handleEditActivity = useCallback((id, fields) => {
+    persist({ ...data, activities: data.activities.map((a) => a.id === id ? { ...a, ...fields } : a) })
+  }, [data, persist])
+
   const handleAddCustomer = useCallback((fields) => {
     const c = { id: uid(), ...fields, createdAt: now() }
     persist({ ...data, customers: [c, ...(data.customers || [])] })
@@ -1509,7 +1643,7 @@ export default function App() {
 
         {/* ── MAIN VIEWS ── */}
         {view === 'Dashboard'    && <DashboardView   kpis={kpis} activities={filteredActivities} isMobile={isMobile} period={period} />}
-        {view === 'Aktivitäten' && <ActivitiesView   activities={data.activities} onDelete={handleDelete} />}
+        {view === 'Aktivitäten' && <ActivitiesView   activities={data.activities} onDelete={handleDelete} onEdit={handleEditActivity} />}
         {view === 'Pipeline'     && <PipelineView     activities={data.activities} />}
         {view === 'Statistiken'  && <StatisticsView  activities={filteredActivities} kpis={kpis} isMobile={isMobile} period={period} />}
         {view === 'Strategie'   && <StrategieView    customers={data.customers || []} onAdd={handleAddCustomer} onMove={handleMoveCustomer} onDelete={handleDeleteCustomer} />}
