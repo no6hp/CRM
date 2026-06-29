@@ -60,18 +60,19 @@ JSON-Schema (alle Felder optional außer type):
   "result": "appointment" | "callback" | "not_interested" | "not_reached" | "won" | "lost",
   "followUp": "ISO 8601 Datum+Uhrzeit des Folgetargets",
   "dealUnits": <Anzahl Einheiten als Zahl>,
-  "dealValue": <Wert pro Einheit in EUR als Zahl>,
-  "dealTotal": <Gesamtwert in EUR als Zahl>,
-  "dealProduct": "Produktname oder Thema",
+  "dealProduct": "Produktname / Beratungswunsch / Thema",
   "note": "Prägnante Zusammenfassung für das CRM",
-  "calendarTitle": "Kurzer Titel für iOS-Kalendereintrag",
-  "calendarNote": "Details für Kalendernotiz"
+  "calendarTitle": "Name – Beratungswunsch (z.B. 'Maria Müller – Altersvorsorge')",
+  "calendarNote": "Mehrzeiliger Text mit: Telefon, alle Kontaktdaten, Beratungsthema, sonstige erwähnte Infos"
 }
 
 Regeln:
 - "Donnerstag 14 Uhr" = nächsten Donnerstag 14:00:00
 - "08.08.26" = 2026-08-08T09:00:00
-- dealTotal = dealUnits × dealValue wenn nicht explizit angegeben
+- dealUnits = Anzahl der genannten Einheiten (z.B. "2 Einheiten" → 2)
+- Bei result:"appointment" MÜSSEN calendarTitle und calendarNote gesetzt sein
+- calendarTitle = "<Name> – <Beratungswunsch>" (exakter Kundenname + Thema)
+- calendarNote = alle Kontaktdaten (Telefon, Adresse falls genannt) + Beratungsdetails + sonstige Notizen aus dem Text
 - Antworte ausschließlich mit validem JSON`
 
   const res = await fetch('https://api.anthropic.com/v1/messages', {
@@ -145,14 +146,12 @@ const TYPE_LABEL = {
 const CHART_COLORS = ['#7c3aed', '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#06b6d4']
 
 const KPI_CONFIG = [
-  { key: 'totalRevenue',     label: 'Gesamtumsatz',    format: fmt,                      gradient: 'linear-gradient(135deg,#6d28d9,#7c3aed)', icon: '💶' },
-  { key: 'closeRate',        label: 'Abschlussquote',  format: (v) => `${v.toFixed(1)} %`, gradient: 'linear-gradient(135deg,#1d4ed8,#2563eb)', icon: '🎯' },
-  { key: 'appointmentRate',  label: 'Terminquote',     format: (v) => `${v.toFixed(1)} %`, gradient: 'linear-gradient(135deg,#0369a1,#0284c7)', icon: '📅' },
-  { key: 'totalCalls',       label: 'Anrufe gesamt',   format: (v) => v,                gradient: 'linear-gradient(135deg,#0f766e,#0d9488)', icon: '📞' },
-  { key: 'pipelineValue',    label: 'Pipeline-Wert',   format: fmt,                      gradient: 'linear-gradient(135deg,#5b21b6,#6d28d9)', icon: '📊' },
-  { key: 'openAppointments', label: 'Offene Termine',  format: (v) => v,                gradient: 'linear-gradient(135deg,#1e40af,#1d4ed8)', icon: '🗓' },
-  { key: 'avgDeal',          label: 'Ø Abschlussgröße',format: fmt,                      gradient: 'linear-gradient(135deg,#047857,#059669)', icon: '💰' },
-  { key: 'wonDeals',         label: 'Gewonnene Deals', format: (v) => v,                gradient: 'linear-gradient(135deg,#065f46,#047857)', icon: '🏆' },
+  { key: 'totalRevenue',     label: 'Gesamtumsatz',   format: (v) => String(v),          gradient: 'linear-gradient(135deg,#6d28d9,#7c3aed)', icon: '💶' },
+  { key: 'closeRate',        label: 'Abschlussquote', format: (v) => `${v.toFixed(1)} %`, gradient: 'linear-gradient(135deg,#1d4ed8,#2563eb)', icon: '🎯' },
+  { key: 'appointmentRate',  label: 'Terminquote',    format: (v) => `${v.toFixed(1)} %`, gradient: 'linear-gradient(135deg,#0369a1,#0284c7)', icon: '📅' },
+  { key: 'totalCalls',       label: 'Anrufe gesamt',  format: (v) => v,                  gradient: 'linear-gradient(135deg,#0f766e,#0d9488)', icon: '📞' },
+  { key: 'totalUnits',       label: 'Einheiten',      format: (v) => v,                  gradient: 'linear-gradient(135deg,#5b21b6,#6d28d9)', icon: '📦' },
+  { key: 'openAppointments', label: 'Offene Termine', format: (v) => v,                  gradient: 'linear-gradient(135deg,#1e40af,#1d4ed8)', icon: '🗓' },
 ]
 
 const NAV_ITEMS = [
@@ -168,16 +167,14 @@ const computeKpis = (activities) => {
   const appts = activities.filter((a) => a.result === 'appointment')
   const won   = activities.filter((a) => a.type === 'deal' && a.result === 'won')
   const open  = activities.filter((a) => a.result === 'appointment' && a.followUp && new Date(a.followUp) > new Date())
-  const totalRevenue = won.reduce((s, d) => s + (d.dealTotal || 0), 0)
+  const totalUnits = won.reduce((s, d) => s + (d.dealUnits || 0), 0)
   return {
-    totalRevenue,
+    totalRevenue:     totalUnits * 7,
     closeRate:        calls.length ? (won.length / calls.length) * 100 : 0,
     appointmentRate:  calls.length ? (appts.length / calls.length) * 100 : 0,
     totalCalls:       calls.length,
-    pipelineValue:    activities.filter((a) => a.result === 'appointment').reduce((s, a) => s + (a.dealTotal || 15000), 0),
+    totalUnits,
     openAppointments: open.length,
-    avgDeal:          won.length ? totalRevenue / won.length : 0,
-    wonDeals:         won.length,
   }
 }
 
@@ -187,23 +184,78 @@ const getISOWeek = (d) => {
   return Math.ceil(((date - new Date(Date.UTC(date.getUTCFullYear(), 0, 1))) / 86400000 + 1) / 7)
 }
 
-const buildWeeklyData = (activities) => {
+const filterByPeriod = (activities, period) => {
+  if (period === 'all') return activities
+  const cutoff = new Date()
+  if (period === '1m') cutoff.setMonth(cutoff.getMonth() - 1)
+  else if (period === '3m') cutoff.setMonth(cutoff.getMonth() - 3)
+  else if (period === '6m') cutoff.setMonth(cutoff.getMonth() - 6)
+  else if (period === '1y') cutoff.setFullYear(cutoff.getFullYear() - 1)
+  return activities.filter((a) => new Date(a.createdAt) >= cutoff)
+}
+
+const buildChartData = (activities, period = 'all') => {
+  const now = new Date()
+  const empty = () => ({ anrufe: 0, termine: 0, abschlüsse: 0, umsatz: 0 })
   const buckets = {}
-  const base = new Date()
-  for (let i = 7; i >= 0; i--) {
-    const d = new Date(base); d.setDate(d.getDate() - i * 7)
-    const label = `KW${getISOWeek(d)}`
-    buckets[label] = { label, anrufe: 0, termine: 0, abschlüsse: 0, umsatz: 0 }
-  }
-  activities.forEach((a) => {
-    const label = `KW${getISOWeek(new Date(a.createdAt))}`
+
+  const fillActivity = (label) => {
     if (!buckets[label]) return
-    if (a.type === 'call' || a.type === 'callback') buckets[label].anrufe++
-    if (a.result === 'appointment') buckets[label].termine++
-    if (a.type === 'deal' && a.result === 'won') { buckets[label].abschlüsse++; buckets[label].umsatz += a.dealTotal || 0 }
-  })
+    return (a) => {
+      if (a.type === 'call' || a.type === 'callback') buckets[label].anrufe++
+      if (a.result === 'appointment') buckets[label].termine++
+      if (a.type === 'deal' && a.result === 'won') { buckets[label].abschlüsse++; buckets[label].umsatz += (a.dealUnits || 0) * 7 }
+    }
+  }
+
+  if (period === '1m' || period === '3m') {
+    const weeks = period === '1m' ? 4 : 13
+    for (let i = weeks - 1; i >= 0; i--) {
+      const d = new Date(now); d.setDate(d.getDate() - i * 7)
+      const label = `KW${getISOWeek(d)}`
+      if (!buckets[label]) buckets[label] = { label, ...empty() }
+    }
+    activities.forEach((a) => {
+      const label = `KW${getISOWeek(new Date(a.createdAt))}`
+      if (!buckets[label]) return
+      if (a.type === 'call' || a.type === 'callback') buckets[label].anrufe++
+      if (a.result === 'appointment') buckets[label].termine++
+      if (a.type === 'deal' && a.result === 'won') { buckets[label].abschlüsse++; buckets[label].umsatz += (a.dealUnits || 0) * 7 }
+    })
+  } else {
+    const months = period === '6m' ? 6 : period === '1y' ? 12 : null
+    if (months) {
+      for (let i = months - 1; i >= 0; i--) {
+        const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
+        const label = d.toLocaleDateString('de-DE', { month: 'short', year: '2-digit' })
+        buckets[label] = { label, ...empty() }
+      }
+    } else {
+      const earliest = activities.length
+        ? activities.reduce((min, a) => { const d = new Date(a.createdAt); return d < min ? d : min }, new Date())
+        : new Date(now.getFullYear(), now.getMonth() - 5, 1)
+      let cur = new Date(earliest.getFullYear(), earliest.getMonth(), 1)
+      while (cur <= now) {
+        const label = cur.toLocaleDateString('de-DE', { month: 'short', year: '2-digit' })
+        buckets[label] = { label, ...empty() }
+        cur.setMonth(cur.getMonth() + 1)
+      }
+    }
+    activities.forEach((a) => {
+      const d = new Date(a.createdAt)
+      const label = d.toLocaleDateString('de-DE', { month: 'short', year: '2-digit' })
+      if (!buckets[label]) return
+      if (a.type === 'call' || a.type === 'callback') buckets[label].anrufe++
+      if (a.result === 'appointment') buckets[label].termine++
+      if (a.type === 'deal' && a.result === 'won') { buckets[label].abschlüsse++; buckets[label].umsatz += (a.dealUnits || 0) * 7 }
+    })
+  }
+
   return Object.values(buckets)
 }
+
+// Keep alias for any remaining references
+const buildWeeklyData = (activities) => buildChartData(activities, 'all')
 
 const buildPipelineStages = (activities) => {
   const s = { contacted: [], appointment: [], won: [], lost: [], noInterest: [] }
@@ -319,8 +371,8 @@ const ActivityCard = ({ activity, onDelete }) => {
 /* ═══════════════════════════════════════════════════════════════════
    VIEW: Dashboard
 ═══════════════════════════════════════════════════════════════════ */
-const DashboardView = ({ kpis, activities, isMobile }) => {
-  const weekly = useMemo(() => buildWeeklyData(activities), [activities])
+const DashboardView = ({ kpis, activities, isMobile, period }) => {
+  const chartData = useMemo(() => buildChartData(activities, period), [activities, period])
   const stages = useMemo(() => buildPipelineStages(activities), [activities])
 
   const donutData = [
@@ -345,7 +397,7 @@ const DashboardView = ({ kpis, activities, isMobile }) => {
         <div style={{ background: '#fff', borderRadius: 12, padding: '16px', boxShadow: '0 1px 3px rgba(0,0,0,0.07)', border: '1px solid #f1f5f9' }}>
           <div style={{ fontWeight: 700, fontSize: 14, color: '#0f172a', marginBottom: 12 }}>Aktivitäten pro Woche</div>
           <ResponsiveContainer width="100%" height={isMobile ? 180 : 200}>
-            <AreaChart data={weekly} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
+            <AreaChart data={chartData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
               <defs>
                 {['anrufe', 'termine', 'abschlüsse'].map((k, i) => (
                   <linearGradient key={k} id={`g${k}`} x1="0" y1="0" x2="0" y2="1">
@@ -540,15 +592,15 @@ const PipelineView = ({ activities }) => {
 /* ═══════════════════════════════════════════════════════════════════
    VIEW: Statistiken
 ═══════════════════════════════════════════════════════════════════ */
-const StatisticsView = ({ activities, kpis, isMobile }) => {
-  const weekly = useMemo(() => buildWeeklyData(activities), [activities])
+const StatisticsView = ({ activities, kpis, isMobile, period }) => {
+  const chartData = useMemo(() => buildChartData(activities, period), [activities, period])
 
   const monthlyRevenue = useMemo(() => {
     const m = {}
     activities.filter((a) => a.type === 'deal' && a.result === 'won').forEach((a) => {
       const d = new Date(a.createdAt)
-      const key = `${d.getMonth() + 1}/${String(d.getFullYear()).slice(2)}`
-      m[key] = (m[key] || 0) + (a.dealTotal || 0)
+      const key = d.toLocaleDateString('de-DE', { month: 'short', year: '2-digit' })
+      m[key] = (m[key] || 0) + (a.dealUnits || 0) * 7
     })
     return Object.entries(m).map(([name, umsatz]) => ({ name, umsatz }))
   }, [activities])
@@ -564,10 +616,10 @@ const StatisticsView = ({ activities, kpis, isMobile }) => {
   }, [activities])
 
   const statCards = [
-    { label: 'Terminquote',    value: `${kpis.appointmentRate.toFixed(1)} %`, sub: 'Anrufe → Termin',    color: '#3b82f6' },
-    { label: 'Abschlussquote', value: `${kpis.closeRate.toFixed(1)} %`,       sub: 'Anrufe → Gewonnen', color: '#10b981' },
-    { label: 'Ø Abschluss',    value: fmt(kpis.avgDeal),                      sub: 'pro Deal',          color: '#f59e0b' },
-    { label: 'Gesamtumsatz',   value: fmt(kpis.totalRevenue),                 sub: `${kpis.wonDeals} Deals`, color: '#7c3aed' },
+    { label: 'Terminquote',    value: `${kpis.appointmentRate.toFixed(1)} %`, sub: 'Anrufe → Termin',       color: '#3b82f6' },
+    { label: 'Abschlussquote', value: `${kpis.closeRate.toFixed(1)} %`,       sub: 'Anrufe → Gewonnen',    color: '#10b981' },
+    { label: 'Einheiten',      value: String(kpis.totalUnits),                 sub: 'gewonnene Abschlüsse', color: '#f59e0b' },
+    { label: 'Gesamtumsatz',   value: String(kpis.totalRevenue),              sub: 'Einheiten × 7',        color: '#7c3aed' },
   ]
 
   return (
@@ -586,7 +638,7 @@ const StatisticsView = ({ activities, kpis, isMobile }) => {
         <div style={{ background: '#fff', borderRadius: 12, padding: '16px', boxShadow: '0 1px 3px rgba(0,0,0,0.07)', border: '1px solid #f1f5f9' }}>
           <div style={{ fontWeight: 700, fontSize: 14, color: '#0f172a', marginBottom: 12 }}>Anrufe & Termine / Woche</div>
           <ResponsiveContainer width="100%" height={180}>
-            <BarChart data={weekly} barGap={3} margin={{ left: -20, right: 0, top: 0, bottom: 0 }}>
+            <BarChart data={chartData} barGap={3} margin={{ left: -20, right: 0, top: 0, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
               <XAxis dataKey="label" tick={{ fontSize: 10, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
               <YAxis tick={{ fontSize: 10, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
@@ -794,6 +846,7 @@ export default function App() {
   const [success, setSuccess] = useState('')
   const [showApiKey, setShowApiKey] = useState(false)
   const [tempKey, setTempKey] = useState('')
+  const [period, setPeriod] = useState('all')
   const [recording, setRecording] = useState(false)
   const recognitionRef = useRef(null)
   const recordingRef = useRef(false)
@@ -836,7 +889,8 @@ export default function App() {
   }, [])
 
   const persist = useCallback((newData) => { setData(newData); save(newData) }, [])
-  const kpis = useMemo(() => computeKpis(data.activities), [data.activities])
+  const filteredActivities = useMemo(() => filterByPeriod(data.activities, period), [data.activities, period])
+  const kpis = useMemo(() => computeKpis(filteredActivities), [filteredActivities])
 
   const handleAnalyze = async () => {
     if (!input.trim()) return
@@ -854,9 +908,19 @@ export default function App() {
     if (!preview) return
     const activity = { id: uid(), ...preview, createdAt: now() }
     persist({ ...data, activities: [activity, ...data.activities] })
-    if (preview.followUp && preview.calendarTitle) exportCalendar(preview.calendarTitle, preview.calendarNote || preview.note || '', preview.followUp)
-    setSuccess(preview.followUp ? `✓ Gespeichert · Kalender-Export (${preview.calendarTitle}) gestartet` : '✓ Aktivität gespeichert')
-    setTimeout(() => setSuccess(''), 4000)
+    const isAppointment = preview.result === 'appointment' || preview.type === 'appointment'
+    if (preview.followUp && isAppointment) {
+      const title = preview.calendarTitle || [preview.name, preview.dealProduct].filter(Boolean).join(' – ') || 'Termin'
+      const desc = preview.calendarNote || [
+        preview.phone ? `Tel: ${preview.phone}` : '',
+        preview.note || '',
+      ].filter(Boolean).join('\n')
+      exportCalendar(title, desc, preview.followUp)
+      setSuccess(`✓ Gespeichert · 📅 Kalender-Export gestartet: ${title}`)
+    } else {
+      setSuccess('✓ Aktivität gespeichert')
+    }
+    setTimeout(() => setSuccess(''), 5000)
     setPreview(null); setInput('')
   }
 
@@ -1084,11 +1148,34 @@ export default function App() {
           />
         )}
 
+        {/* ── ZEITRAUM-FILTER ── */}
+        {view !== 'Logger' && view !== 'Aktivitäten' && view !== 'Pipeline' && (
+          <div style={{ display: 'flex', gap: 6, marginBottom: 14, overflowX: 'auto', WebkitOverflowScrolling: 'touch', paddingBottom: 2 }}>
+            {[
+              { key: 'all', label: 'Gesamt' },
+              { key: '1m',  label: '1 Monat' },
+              { key: '3m',  label: '3 Monate' },
+              { key: '6m',  label: '6 Monate' },
+              { key: '1y',  label: '1 Jahr' },
+            ].map((p) => (
+              <button key={p.key} onClick={() => setPeriod(p.key)} style={{
+                padding: '6px 14px', borderRadius: 20, cursor: 'pointer',
+                fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap', flexShrink: 0,
+                background: period === p.key ? '#7c3aed' : '#fff',
+                color: period === p.key ? '#fff' : '#64748b',
+                border: `1px solid ${period === p.key ? '#7c3aed' : '#e2e8f0'}`,
+                boxShadow: period === p.key ? '0 2px 8px rgba(124,58,237,0.3)' : '0 1px 3px rgba(0,0,0,0.07)',
+                transition: 'all 0.15s',
+              }}>{p.label}</button>
+            ))}
+          </div>
+        )}
+
         {/* ── MAIN VIEWS ── */}
-        {view === 'Dashboard'    && <DashboardView   kpis={kpis} activities={data.activities} isMobile={isMobile} />}
+        {view === 'Dashboard'    && <DashboardView   kpis={kpis} activities={filteredActivities} isMobile={isMobile} period={period} />}
         {view === 'Aktivitäten' && <ActivitiesView   activities={data.activities} onDelete={handleDelete} />}
         {view === 'Pipeline'     && <PipelineView     activities={data.activities} />}
-        {view === 'Statistiken'  && <StatisticsView  activities={data.activities} kpis={kpis} isMobile={isMobile} />}
+        {view === 'Statistiken'  && <StatisticsView  activities={filteredActivities} kpis={kpis} isMobile={isMobile} period={period} />}
       </main>
 
       {/* ── MOBILE BOTTOM TAB BAR ── */}
