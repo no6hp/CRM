@@ -1187,12 +1187,13 @@ const TeamMemberModal = ({ member, onUpdateUnits, onClose }) => {
 /* ═══════════════════════════════════════════════════════════════════
    VIEW: Recruiting
 ═══════════════════════════════════════════════════════════════════ */
-const RecruitingView = ({ recruits, onAdd, onUpdateStatus, onDelete, onUpdateUnits }) => {
+const RecruitingView = ({ recruits, onAdd, onUpdateStatus, onDelete, onUpdateUnits, onEditRecruit }) => {
   const [tab, setTab] = useState('pipeline')
   const [showForm, setShowForm] = useState(false)
   const [filter, setFilter] = useState('all')
   const [form, setForm] = useState({ name: '', phone: '', note: '', bvgDate: '' })
   const [selectedMember, setSelectedMember] = useState(null)
+  const [editingRecruit, setEditingRecruit] = useState(null)
 
   const teamMembers = recruits.filter((r) => r.status === 'team')
   const filtered = filter === 'all' ? recruits : recruits.filter((r) => r.status === filter)
@@ -1282,7 +1283,10 @@ const RecruitingView = ({ recruits, onAdd, onUpdateStatus, onDelete, onUpdateUni
                         <div style={{ fontWeight: 700, fontSize: 14, color: '#0f172a' }}>{r.name}</div>
                         {r.phone && <a href={`tel:${r.phone}`} style={{ fontSize: 12, color: '#3b82f6', textDecoration: 'none' }}>{r.phone}</a>}
                       </div>
-                      <button onClick={() => onDelete(r.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#cbd5e1', fontSize: 14, padding: '2px 4px' }}>✕</button>
+                      <div style={{ display: 'flex', gap: 2 }}>
+                        <button onClick={() => setEditingRecruit(r)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', fontSize: 14, padding: '2px 6px' }}>✏️</button>
+                        <button onClick={() => onDelete(r.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#cbd5e1', fontSize: 14, padding: '2px 4px' }}>✕</button>
+                      </div>
                     </div>
                     {r.bvgDate && <div style={{ fontSize: 11, color: '#7c3aed', marginTop: 4 }}>📅 BVG: {fmtDate(r.bvgDate)}</div>}
                     {r.note && <div style={{ fontSize: 12, color: '#64748b', marginTop: 6, lineHeight: 1.4 }}>{r.note}</div>}
@@ -1358,6 +1362,69 @@ const RecruitingView = ({ recruits, onAdd, onUpdateStatus, onDelete, onUpdateUni
           onClose={() => setSelectedMember(null)}
         />
       )}
+
+      {editingRecruit && (
+        <EditRecruitModal
+          recruit={editingRecruit}
+          onSave={(id, fields) => { onEditRecruit(id, fields); setEditingRecruit(null) }}
+          onClose={() => setEditingRecruit(null)}
+        />
+      )}
+    </div>
+  )
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   COMPONENT: EditRecruitModal
+═══════════════════════════════════════════════════════════════════ */
+const EditRecruitModal = ({ recruit, onSave, onClose }) => {
+  const [fields, setFields] = useState({
+    name:    recruit.name || '',
+    phone:   recruit.phone || '',
+    bvgDate: recruit.bvgDate || '',
+    note:    recruit.note || '',
+  })
+  const set = (k) => (e) => setFields((f) => ({ ...f, [k]: e.target.value }))
+  const inputStyle = {
+    width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid #e2e8f0',
+    fontSize: 14, color: '#0f172a', outline: 'none', background: '#fff', boxSizing: 'border-box',
+  }
+  const labelStyle = { fontSize: 12, fontWeight: 600, color: '#64748b', marginBottom: 4, display: 'block' }
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 9000, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }} onClick={onClose}>
+      <div onClick={(e) => e.stopPropagation()} style={{
+        background: '#fff', borderRadius: '20px 20px 0 0', padding: '24px 20px',
+        width: '100%', maxWidth: 560, maxHeight: '85vh', overflowY: 'auto',
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+          <div style={{ fontWeight: 700, fontSize: 16, color: '#0f172a' }}>Person bearbeiten</div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: '#94a3b8', padding: 4, lineHeight: 1 }}>✕</button>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            <div>
+              <label style={labelStyle}>Name</label>
+              <input style={inputStyle} value={fields.name} onChange={set('name')} placeholder="Name" />
+            </div>
+            <div>
+              <label style={labelStyle}>Telefon</label>
+              <input style={inputStyle} value={fields.phone} onChange={set('phone')} placeholder="+49 …" />
+            </div>
+          </div>
+          <div>
+            <label style={labelStyle}>BVG-Termin / Datum</label>
+            <input style={inputStyle} type="datetime-local" value={fields.bvgDate} onChange={set('bvgDate')} />
+          </div>
+          <div>
+            <label style={labelStyle}>Notiz</label>
+            <textarea style={{ ...inputStyle, minHeight: 80, resize: 'vertical', fontFamily: 'inherit' }} value={fields.note} onChange={set('note')} placeholder="Notizen …" />
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: 10, marginTop: 20, paddingBottom: 'env(safe-area-inset-bottom)' }}>
+          <button onClick={onClose} style={{ flex: 1, padding: '13px', borderRadius: 10, border: '1px solid #e2e8f0', background: '#f8fafc', color: '#64748b', fontWeight: 600, fontSize: 14, cursor: 'pointer' }}>Abbrechen</button>
+          <button onClick={() => { onSave(recruit.id, fields); onClose() }} style={{ flex: 2, padding: '13px', borderRadius: 10, border: 'none', background: 'linear-gradient(135deg,#7c3aed,#3b82f6)', color: '#fff', fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>Speichern</button>
+        </div>
+      </div>
     </div>
   )
 }
@@ -1538,6 +1605,10 @@ export default function App() {
 
   const handleUpdateRecruitUnits = useCallback((id, units) => {
     persist({ ...data, recruits: (data.recruits || []).map((r) => r.id === id ? { ...r, units } : r) })
+  }, [data, persist])
+
+  const handleEditRecruit = useCallback((id, fields) => {
+    persist({ ...data, recruits: (data.recruits || []).map((r) => r.id === id ? { ...r, ...fields } : r) })
   }, [data, persist])
 
   const saveKey = () => {
@@ -1868,7 +1939,7 @@ export default function App() {
         {view === 'Pipeline'     && <PipelineView     activities={data.activities} />}
         {view === 'Statistiken'  && <StatisticsView  activities={filteredActivities} kpis={kpis} isMobile={isMobile} period={period} />}
         {view === 'Strategie'   && <StrategieView    customers={data.customers || []} onAdd={handleAddCustomer} onMove={handleMoveCustomer} onDelete={handleDeleteCustomer} />}
-        {view === 'Recruiting'  && <RecruitingView   recruits={data.recruits || []} onAdd={handleAddRecruit} onUpdateStatus={handleUpdateRecruitStatus} onDelete={handleDeleteRecruit} onUpdateUnits={handleUpdateRecruitUnits} />}
+        {view === 'Recruiting'  && <RecruitingView   recruits={data.recruits || []} onAdd={handleAddRecruit} onUpdateStatus={handleUpdateRecruitStatus} onDelete={handleDeleteRecruit} onUpdateUnits={handleUpdateRecruitUnits} onEditRecruit={handleEditRecruit} />}
       </main>
 
       {/* ── MOBILE BOTTOM TAB BAR ── */}
