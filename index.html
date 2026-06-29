@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>FinCRM – Finanzvertrieb</title>
+
+    <!-- PWA / Web App -->
+    <link rel="manifest" href="/CRM/manifest.json" />
+    <meta name="theme-color" content="#0f172a" />
+    <meta name="mobile-web-app-capable" content="yes" />
+
+    <!-- iOS Safari PWA -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="FinCRM" />
+    <link rel="apple-touch-icon" href="/CRM/icon-192.png" />
+    <link rel="apple-touch-icon" sizes="192x192" href="/CRM/icon-192.png" />
+    <link rel="apple-touch-icon" sizes="512x512" href="/CRM/icon-512.png" />
+
+    <!-- Splash screens for common iPhone sizes -->
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+
+    <!-- Favicon -->
+    <link rel="icon" type="image/png" sizes="192x192" href="/CRM/icon-192.png" />
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+
+    <style>
+      *, *::before, *::after { box-sizing: border-box; }
+      html, body { margin: 0; padding: 0; background: #0f172a; }
+      body {
+        -webkit-tap-highlight-color: transparent;
+        -webkit-text-size-adjust: 100%;
+        touch-action: manipulation;
+      }
+      /* Safe area support for iPhone notch + home bar */
+      #root {
+        padding-top: env(safe-area-inset-top);
+        padding-bottom: env(safe-area-inset-bottom);
+        padding-left: env(safe-area-inset-left);
+        padding-right: env(safe-area-inset-right);
+      }
+      /* Smooth scrolling */
+      * { -webkit-overflow-scrolling: touch; }
+      /* Remove iOS input styling */
+      input, textarea, button { -webkit-appearance: none; font-family: inherit; }
+      /* Prevent text selection on buttons */
+      button { user-select: none; -webkit-user-select: none; }
+    </style>
+    <script type="module" crossorigin src="/CRM/assets/index-DL62tp6f.js"></script>
+    <link rel="modulepreload" crossorigin href="/CRM/assets/vendor-4V4hfLFZ.js">
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>
