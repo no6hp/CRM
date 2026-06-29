@@ -16,8 +16,8 @@ function useWindowWidth() {
 }
 
 /* ─────────────────────────── STORAGE ─────────────────────────── */
-const STORAGE_KEY = 'fincrm_v2'
-const defaultData = () => ({ activities: [], apiKey: '', seedDone: false })
+const STORAGE_KEY = 'fincrm_v3'
+const defaultData = () => ({ activities: [], apiKey: '' })
 
 const load = () => {
   try {
@@ -44,34 +44,6 @@ const fmtShortDate = (iso) =>
   iso ? new Date(iso).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' }) : '—'
 
 const now = () => new Date().toISOString()
-
-/* ─────────────────────────── SEED DATA ─────────────────────────── */
-const SEED = (() => {
-  const ago = (days, h = 10) => { const d = new Date(); d.setDate(d.getDate() - days); d.setHours(h, 0, 0, 0); return d.toISOString() }
-  const future = (days, h = 14) => { const d = new Date(); d.setDate(d.getDate() + days); d.setHours(h, 0, 0, 0); return d.toISOString() }
-  return [
-    { id: uid(), type: 'deal', name: 'Claudia Hoffmann', phone: '0171 234567', result: 'won', dealUnits: 3, dealValue: 15000, dealTotal: 45000, dealProduct: 'Altersvorsorge', note: 'Altersvorsorge-Abschluss, sehr zufrieden', createdAt: ago(2) },
-    { id: uid(), type: 'call', name: 'Thomas Bauer', phone: '0162 345678', result: 'appointment', followUp: future(3, 11), calendarTitle: 'Termin Thomas Bauer – Beratung', calendarNote: 'Erstgespräch Altersvorsorge', note: 'Sehr interessiert, Termin in 3 Tagen', createdAt: ago(3) },
-    { id: uid(), type: 'call', name: 'Sabine Koch', phone: '', result: 'not_reached', followUp: future(1, 15), calendarTitle: 'Rückruf Sabine Koch', note: 'Nicht erreicht, Rückruf morgen 15 Uhr', createdAt: ago(3) },
-    { id: uid(), type: 'deal', name: 'Peter Schulz', phone: '0176 456789', result: 'won', dealUnits: 2, dealValue: 20000, dealTotal: 40000, dealProduct: 'Fondsgebundene RV', note: 'Zwei Policen abgeschlossen', createdAt: ago(5) },
-    { id: uid(), type: 'call', name: 'Andrea Fischer', phone: '0151 567890', result: 'callback', followUp: future(2, 10), calendarTitle: 'Rückruf Andrea Fischer', note: 'Gerade keine Zeit, nächste Woche Dienstag', createdAt: ago(5) },
-    { id: uid(), type: 'appointment', name: 'Klaus Müller', phone: '0170 678901', result: 'appointment', followUp: future(7), calendarTitle: 'Folgetermin Klaus Müller', note: 'Folgetermin nach Erstgespräch – Unterlagen mitbringen', createdAt: ago(7) },
-    { id: uid(), type: 'call', name: 'Ingrid Wagner', phone: '0163 789012', result: 'not_interested', note: 'Kein Interesse, bereits anderweitig versorgt', createdAt: ago(8) },
-    { id: uid(), type: 'deal', name: 'Frank Schneider', phone: '0172 890123', result: 'won', dealUnits: 1, dealValue: 30000, dealTotal: 30000, dealProduct: 'Einmalanlage', note: 'Großer Einmalanlagedeal', createdAt: ago(10) },
-    { id: uid(), type: 'call', name: 'Lisa Weber', phone: '0175 901234', result: 'appointment', followUp: future(5, 14), calendarTitle: 'Termin Lisa Weber – Riester', note: 'Sehr interessiert, Riester-Rente besprochen', createdAt: ago(10) },
-    { id: uid(), type: 'deal', name: 'Michael Braun', phone: '0174 012345', result: 'lost', dealUnits: 2, dealValue: 12000, dealTotal: 24000, dealProduct: 'Berufsunfähigkeit', note: 'Preis zu hoch, Konkurrenzangebot bevorzugt', createdAt: ago(12) },
-    { id: uid(), type: 'call', name: 'Ursula Zimmermann', phone: '0168 123456', result: 'not_reached', createdAt: ago(14) },
-    { id: uid(), type: 'call', name: 'Dieter Krause', phone: '0169 234567', result: 'appointment', followUp: future(10, 9), calendarTitle: 'Termin Dieter Krause', note: 'Interessiert an Lebensversicherung', createdAt: ago(14) },
-    { id: uid(), type: 'deal', name: 'Maria Lange', phone: '0177 345678', result: 'won', dealUnits: 4, dealValue: 10000, dealTotal: 40000, dealProduct: 'bAV', note: 'bAV für 4 Mitarbeiter', createdAt: ago(18) },
-    { id: uid(), type: 'call', name: 'Helmut Richter', phone: '0178 456789', result: 'callback', followUp: future(4, 16), calendarTitle: 'Rückruf Helmut Richter', note: 'Im Urlaub, Rückruf in einer Woche', createdAt: ago(20) },
-    { id: uid(), type: 'call', name: 'Erika Neumann', phone: '0179 567890', result: 'not_interested', note: 'Bereits vollständig abgesichert', createdAt: ago(21) },
-    { id: uid(), type: 'call', name: 'Jörg Wolf', phone: '0171 678901', result: 'appointment', followUp: future(6, 10), calendarTitle: 'Termin Jörg Wolf', note: 'Interesse an Kapitalanlage', createdAt: ago(22) },
-    { id: uid(), type: 'deal', name: 'Beate Hartmann', phone: '0162 789012', result: 'won', dealUnits: 2, dealValue: 25000, dealTotal: 50000, dealProduct: 'Kapitallebensversicherung', note: 'Sehr profitabler Abschluss', createdAt: ago(25) },
-    { id: uid(), type: 'call', name: 'Werner Schreiber', phone: '0163 890123', result: 'not_reached', createdAt: ago(26) },
-    { id: uid(), type: 'call', name: 'Petra Krüger', phone: '0176 901234', result: 'appointment', followUp: future(8, 11), calendarTitle: 'Termin Petra Krüger', note: 'Rentenplanung besprochen', createdAt: ago(28) },
-    { id: uid(), type: 'call', name: 'Hans Vogt', phone: '0175 012345', result: 'not_reached', createdAt: ago(30) },
-  ]
-})()
 
 /* ─────────────────────────── ANTHROPIC ─────────────────────────── */
 const analyzeText = async (text, apiKey) => {
@@ -805,7 +777,6 @@ export default function App() {
 
   useEffect(() => {
     const d = load()
-    if (!d.seedDone) { d.activities = [...SEED, ...d.activities]; d.seedDone = true; save(d) }
     setData(d)
     setTempKey(d.apiKey || '')
     if (!d.apiKey) setShowApiKey(true)
