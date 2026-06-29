@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import {
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend, BarChart, Bar, AreaChart, Area,
@@ -673,24 +673,47 @@ const StatisticsView = ({ activities, kpis, isMobile }) => {
 /* ═══════════════════════════════════════════════════════════════════
    VIEW: Logger (mobile full-screen input)
 ═══════════════════════════════════════════════════════════════════ */
-const LoggerView = ({ input, setInput, analyzing, onAnalyze, preview, onConfirm, onDismiss, error, setError }) => (
+const LoggerView = ({ input, setInput, analyzing, onAnalyze, preview, onConfirm, onDismiss, error, setError, recording, onRecord }) => (
   <div>
     <div style={{ background: '#fff', borderRadius: 14, padding: '18px', boxShadow: '0 2px 8px rgba(0,0,0,0.06)', border: '1px solid #e2e8f0', marginBottom: 14 }}>
       <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 10 }}>
         <div style={{ width: 22, height: 22, borderRadius: 6, background: 'linear-gradient(135deg,#7c3aed,#3b82f6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12 }}>✨</div>
         <span style={{ fontSize: 11, fontWeight: 700, color: '#7c3aed', textTransform: 'uppercase', letterSpacing: '0.08em' }}>KI-Aktivitäts-Logger</span>
       </div>
+
+      {/* Mikrofon-Button */}
+      <button
+        onClick={onRecord}
+        style={{
+          width: '100%', padding: '16px', borderRadius: 12, border: 'none', cursor: 'pointer',
+          background: recording
+            ? 'linear-gradient(135deg,#dc2626,#ef4444)'
+            : 'linear-gradient(135deg,#1e293b,#334155)',
+          color: '#fff', fontWeight: 700, fontSize: 17,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
+          marginBottom: 12,
+          boxShadow: recording
+            ? '0 0 0 4px rgba(239,68,68,0.25), 0 4px 16px rgba(220,38,38,0.4)'
+            : '0 2px 8px rgba(0,0,0,0.15)',
+          transition: 'all 0.2s',
+        }}
+      >
+        <span style={{ fontSize: 24, display: 'inline-block', animation: recording ? 'micPulse 1s ease-in-out infinite' : 'none' }}>🎤</span>
+        {recording ? 'Aufnahme läuft … (Tippen zum Stoppen)' : 'Sprechen  —  Taste [1]'}
+      </button>
+
       <textarea
         value={input}
         onChange={(e) => setInput(e.target.value)}
-        placeholder={`Beschreibe frei was passiert ist:\n\n„Maria Müller angerufen, Tel. 0171 123456, Termin 08.08.26 eingetragen"\n\n„Abschluss mit Herrn Bauer, 2 Einheiten à 25.000€, Altersvorsorge"`}
+        placeholder={'Oder hier frei eintippen:\n\n„Maria Müller angerufen, Tel. 0171 123456, Termin 08.08.26"\n„Abschluss Herr Bauer, 2 Einheiten à 25.000€, Altersvorsorge"'}
         style={{
-          width: '100%', minHeight: 140, padding: '12px 14px', borderRadius: 10,
-          border: '1.5px solid #e2e8f0', fontSize: 15, resize: 'none', outline: 'none',
+          width: '100%', minHeight: 130, padding: '12px 14px', borderRadius: 10,
+          border: `1.5px solid ${recording ? '#ef4444' : '#e2e8f0'}`,
+          fontSize: 15, resize: 'none', outline: 'none',
           color: '#0f172a', lineHeight: 1.55, fontFamily: 'inherit',
+          transition: 'border-color 0.2s',
+          background: recording ? '#fff8f8' : '#fff',
         }}
-        onFocus={(e) => { e.target.style.borderColor = '#7c3aed' }}
-        onBlur={(e) => { e.target.style.borderColor = '#e2e8f0' }}
       />
       <button
         onClick={onAnalyze}
@@ -705,9 +728,6 @@ const LoggerView = ({ input, setInput, analyzing, onAnalyze, preview, onConfirm,
       >
         {analyzing ? '⟳ KI analysiert …' : '✨ Analysieren'}
       </button>
-      <div style={{ marginTop: 8, fontSize: 11, color: '#94a3b8', textAlign: 'center' }}>
-        Claude analysiert den Text und trägt alles automatisch ein
-      </div>
     </div>
 
     {error && (
@@ -774,6 +794,39 @@ export default function App() {
   const [success, setSuccess] = useState('')
   const [showApiKey, setShowApiKey] = useState(false)
   const [tempKey, setTempKey] = useState('')
+  const [recording, setRecording] = useState(false)
+  const recognitionRef = useRef(null)
+  const recordingRef = useRef(false)
+
+  const startVoice = useCallback(() => {
+    if (recordingRef.current) { recognitionRef.current?.stop(); return }
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition
+    if (!SR) { setError('Spracherkennung nicht verfügbar. Bitte eintippen.'); return }
+    const r = new SR()
+    recognitionRef.current = r
+    r.lang = 'de-DE'; r.continuous = true; r.interimResults = true
+    r.onstart = () => { setRecording(true); recordingRef.current = true }
+    r.onend = () => { setRecording(false); recordingRef.current = false }
+    r.onresult = (ev) => {
+      const transcript = Array.from(ev.results).map((res) => res[0].transcript).join('')
+      setInput(transcript)
+    }
+    r.onerror = (ev) => {
+      setRecording(false); recordingRef.current = false
+      if (ev.error !== 'aborted') setError(`Mikrofon: ${ev.error}`)
+    }
+    r.start()
+  }, [])
+
+  useEffect(() => {
+    const handler = (e) => {
+      if (e.key === '1' && !['INPUT', 'TEXTAREA'].includes(e.target.tagName)) {
+        e.preventDefault(); startVoice()
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [startVoice])
 
   useEffect(() => {
     const d = load()
@@ -820,75 +873,6 @@ export default function App() {
 
   /* Bottom padding to clear the fixed bottom tab bar on mobile */
   const mainPaddingBottom = isMobile ? 80 : 40
-
-  /* Desktop AI input bar (shown above main content on desktop) */
-  const DesktopLogger = () => (
-    <div style={{ background: '#fff', borderRadius: 14, padding: '16px 20px', marginBottom: 16, boxShadow: '0 2px 8px rgba(0,0,0,0.06)', border: '1px solid #e2e8f0' }}>
-      <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 8 }}>
-        <div style={{ width: 20, height: 20, borderRadius: 6, background: 'linear-gradient(135deg,#7c3aed,#3b82f6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10 }}>✨</div>
-        <span style={{ fontSize: 11, fontWeight: 700, color: '#7c3aed', textTransform: 'uppercase', letterSpacing: '0.08em' }}>KI-Aktivitäts-Logger</span>
-        <span style={{ marginLeft: 'auto', fontSize: 11, color: '#94a3b8' }}>⌘+Enter</span>
-      </div>
-      <div style={{ display: 'flex', gap: 10 }}>
-        <textarea
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') handleAnalyze() }}
-          placeholder={`„Kundin Maria Müller angerufen, Tel. 0171 123456, Termin am 08.08.26 eingetragen"  ·  „Abschluss mit Herrn Bauer, 2 Einheiten à 25.000€, Altersvorsorge"`}
-          style={{ flex: 1, minHeight: 68, padding: '10px 14px', borderRadius: 10, border: '1.5px solid #e2e8f0', fontSize: 14, resize: 'none', outline: 'none', color: '#0f172a', lineHeight: 1.5, fontFamily: 'inherit' }}
-          onFocus={(e) => { e.target.style.borderColor = '#7c3aed' }}
-          onBlur={(e) => { e.target.style.borderColor = '#e2e8f0' }}
-        />
-        <button
-          onClick={handleAnalyze}
-          disabled={analyzing || !input.trim()}
-          style={{
-            alignSelf: 'flex-end', padding: '11px 22px', borderRadius: 10, border: 'none',
-            cursor: (analyzing || !input.trim()) ? 'not-allowed' : 'pointer',
-            background: (analyzing || !input.trim()) ? '#e2e8f0' : 'linear-gradient(135deg,#7c3aed 0%,#3b82f6 100%)',
-            color: (analyzing || !input.trim()) ? '#94a3b8' : '#fff',
-            fontWeight: 700, fontSize: 14, whiteSpace: 'nowrap',
-            boxShadow: (analyzing || !input.trim()) ? 'none' : '0 4px 14px rgba(124,58,237,0.35)',
-          }}
-        >{analyzing ? '⟳ Analysiere …' : '✨ Analysieren'}</button>
-      </div>
-    </div>
-  )
-
-  const DesktopPreview = () => preview ? (
-    <div style={{ background: '#fff', borderRadius: 14, padding: '18px 20px', marginBottom: 16, boxShadow: '0 4px 28px rgba(124,58,237,0.14)', border: '2px solid #7c3aed' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-        <span style={{ fontWeight: 800, fontSize: 15, color: '#0f172a' }}>✨ KI-Ergebnis – bitte bestätigen</span>
-        <button onClick={() => setPreview(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', fontSize: 20 }}>✕</button>
-      </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(185px, 1fr))', gap: 8, marginBottom: 14 }}>
-        {[
-          { label: 'Typ',       value: TYPE_LABEL[preview.type]?.label || preview.type,          icon: TYPE_LABEL[preview.type]?.icon },
-          preview.name         && { label: 'Name',         value: preview.name,                   icon: '👤' },
-          preview.phone        && { label: 'Telefon',      value: preview.phone,                  icon: '📞' },
-          preview.result       && { label: 'Ergebnis',     value: RESULT_BADGE[preview.result]?.label || preview.result, icon: '📋' },
-          preview.followUp     && { label: 'Folgetermin',  value: fmtDate(preview.followUp),     icon: '📅' },
-          preview.dealUnits    && { label: 'Einheiten',    value: String(preview.dealUnits),      icon: '📦' },
-          preview.dealValue    && { label: 'Wert/Einheit', value: fmt(preview.dealValue),         icon: '💶' },
-          preview.dealTotal    && { label: 'Gesamt',       value: fmt(preview.dealTotal),         icon: '💰' },
-          preview.dealProduct  && { label: 'Produkt',      value: preview.dealProduct,            icon: '🏷' },
-          preview.calendarTitle && { label: 'Kalender',   value: preview.calendarTitle,           icon: '🗓' },
-          preview.note         && { label: 'Notiz',        value: preview.note,                   icon: '📝' },
-        ].filter(Boolean).map((f, i) => (
-          <div key={i} style={{ background: '#f8fafc', borderRadius: 9, padding: '9px 11px', border: '1px solid #f1f5f9' }}>
-            <div style={{ fontSize: 10, color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 3 }}>{f.icon} {f.label}</div>
-            <div style={{ fontSize: 13, fontWeight: 700, color: '#0f172a', wordBreak: 'break-word' }}>{f.value}</div>
-          </div>
-        ))}
-      </div>
-      <div style={{ display: 'flex', gap: 10 }}>
-        <button onClick={handleConfirm} style={{ background: 'linear-gradient(135deg,#7c3aed,#3b82f6)', color: '#fff', border: 'none', borderRadius: 9, padding: '11px 24px', cursor: 'pointer', fontWeight: 700, fontSize: 14, boxShadow: '0 4px 14px rgba(124,58,237,0.35)' }}>
-          ✓ Bestätigen & Speichern{preview.followUp ? ' · Kalender .ics' : ''}
-        </button>
-        <button onClick={() => setPreview(null)} style={{ background: '#f1f5f9', color: '#64748b', border: 'none', borderRadius: 9, padding: '11px 16px', cursor: 'pointer', fontSize: 14 }}>Verwerfen</button>
-      </div>
-    </div>
-  ) : null
 
   /* Which nav items to show on mobile bottom bar */
   const mobileNavItems = [
@@ -997,7 +981,97 @@ export default function App() {
         )}
 
         {/* ── DESKTOP: AI logger always visible above content ── */}
-        {!isMobile && view !== 'Logger' && <><DesktopLogger /><DesktopPreview /></>}
+        {!isMobile && (
+          <div style={{ background: '#fff', borderRadius: 14, padding: '16px 20px', marginBottom: 16, boxShadow: '0 2px 8px rgba(0,0,0,0.06)', border: '1px solid #e2e8f0' }}>
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 8 }}>
+              <div style={{ width: 20, height: 20, borderRadius: 6, background: 'linear-gradient(135deg,#7c3aed,#3b82f6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10 }}>✨</div>
+              <span style={{ fontSize: 11, fontWeight: 700, color: '#7c3aed', textTransform: 'uppercase', letterSpacing: '0.08em' }}>KI-Aktivitäts-Logger</span>
+              <span style={{ marginLeft: 'auto', fontSize: 11, color: '#94a3b8' }}>⌘+Enter · Taste [1] Mikro</span>
+            </div>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button
+                onClick={startVoice}
+                title={recording ? 'Aufnahme stoppen' : 'Spracherkennung starten (Taste 1)'}
+                style={{
+                  flexShrink: 0, width: 46, alignSelf: 'flex-end',
+                  borderRadius: 10, border: 'none', cursor: 'pointer',
+                  background: recording
+                    ? 'linear-gradient(135deg,#dc2626,#ef4444)'
+                    : 'linear-gradient(135deg,#1e293b,#334155)',
+                  color: '#fff', fontSize: 20,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  minHeight: 42,
+                  boxShadow: recording
+                    ? '0 0 0 3px rgba(239,68,68,0.25), 0 4px 12px rgba(220,38,38,0.35)'
+                    : '0 2px 8px rgba(0,0,0,0.15)',
+                  transition: 'all 0.2s',
+                }}
+              >🎤</button>
+              <textarea
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') handleAnalyze() }}
+                placeholder={`„Kundin Maria Müller angerufen, Tel. 0171 123456, Termin am 08.08.26 eingetragen"  ·  „Abschluss mit Herrn Bauer, 2 Einheiten à 25.000€, Altersvorsorge"`}
+                style={{
+                  flex: 1, minHeight: 68, padding: '10px 14px', borderRadius: 10,
+                  border: `1.5px solid ${recording ? '#ef4444' : '#e2e8f0'}`,
+                  fontSize: 14, resize: 'none', outline: 'none',
+                  color: '#0f172a', lineHeight: 1.5, fontFamily: 'inherit',
+                  background: recording ? '#fff8f8' : '#fff',
+                  transition: 'border-color 0.2s',
+                }}
+                onFocus={(e) => { e.target.style.borderColor = recording ? '#ef4444' : '#7c3aed' }}
+                onBlur={(e) => { e.target.style.borderColor = recording ? '#ef4444' : '#e2e8f0' }}
+              />
+              <button
+                onClick={handleAnalyze}
+                disabled={analyzing || !input.trim()}
+                style={{
+                  alignSelf: 'flex-end', padding: '11px 22px', borderRadius: 10, border: 'none',
+                  cursor: (analyzing || !input.trim()) ? 'not-allowed' : 'pointer',
+                  background: (analyzing || !input.trim()) ? '#e2e8f0' : 'linear-gradient(135deg,#7c3aed 0%,#3b82f6 100%)',
+                  color: (analyzing || !input.trim()) ? '#94a3b8' : '#fff',
+                  fontWeight: 700, fontSize: 14, whiteSpace: 'nowrap',
+                  boxShadow: (analyzing || !input.trim()) ? 'none' : '0 4px 14px rgba(124,58,237,0.35)',
+                }}
+              >{analyzing ? '⟳ Analysiere …' : '✨ Analysieren'}</button>
+            </div>
+          </div>
+        )}
+        {!isMobile && preview && (
+          <div style={{ background: '#fff', borderRadius: 14, padding: '18px 20px', marginBottom: 16, boxShadow: '0 4px 28px rgba(124,58,237,0.14)', border: '2px solid #7c3aed' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+              <span style={{ fontWeight: 800, fontSize: 15, color: '#0f172a' }}>✨ KI-Ergebnis – bitte bestätigen</span>
+              <button onClick={() => setPreview(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', fontSize: 20 }}>✕</button>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(185px, 1fr))', gap: 8, marginBottom: 14 }}>
+              {[
+                { label: 'Typ',       value: TYPE_LABEL[preview.type]?.label || preview.type,          icon: TYPE_LABEL[preview.type]?.icon },
+                preview.name         && { label: 'Name',         value: preview.name,                   icon: '👤' },
+                preview.phone        && { label: 'Telefon',      value: preview.phone,                  icon: '📞' },
+                preview.result       && { label: 'Ergebnis',     value: RESULT_BADGE[preview.result]?.label || preview.result, icon: '📋' },
+                preview.followUp     && { label: 'Folgetermin',  value: fmtDate(preview.followUp),     icon: '📅' },
+                preview.dealUnits    && { label: 'Einheiten',    value: String(preview.dealUnits),      icon: '📦' },
+                preview.dealValue    && { label: 'Wert/Einheit', value: fmt(preview.dealValue),         icon: '💶' },
+                preview.dealTotal    && { label: 'Gesamt',       value: fmt(preview.dealTotal),         icon: '💰' },
+                preview.dealProduct  && { label: 'Produkt',      value: preview.dealProduct,            icon: '🏷' },
+                preview.calendarTitle && { label: 'Kalender',   value: preview.calendarTitle,           icon: '🗓' },
+                preview.note         && { label: 'Notiz',        value: preview.note,                   icon: '📝' },
+              ].filter(Boolean).map((f, i) => (
+                <div key={i} style={{ background: '#f8fafc', borderRadius: 9, padding: '9px 11px', border: '1px solid #f1f5f9' }}>
+                  <div style={{ fontSize: 10, color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 3 }}>{f.icon} {f.label}</div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: '#0f172a', wordBreak: 'break-word' }}>{f.value}</div>
+                </div>
+              ))}
+            </div>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button onClick={handleConfirm} style={{ background: 'linear-gradient(135deg,#7c3aed,#3b82f6)', color: '#fff', border: 'none', borderRadius: 9, padding: '11px 24px', cursor: 'pointer', fontWeight: 700, fontSize: 14, boxShadow: '0 4px 14px rgba(124,58,237,0.35)' }}>
+                ✓ Bestätigen & Speichern{preview.followUp ? ' · Kalender .ics' : ''}
+              </button>
+              <button onClick={() => setPreview(null)} style={{ background: '#f1f5f9', color: '#64748b', border: 'none', borderRadius: 9, padding: '11px 16px', cursor: 'pointer', fontSize: 14 }}>Verwerfen</button>
+            </div>
+          </div>
+        )}
 
         {/* ── MOBILE: Logger is its own view ── */}
         {isMobile && view === 'Logger' && (
@@ -1006,6 +1080,7 @@ export default function App() {
             analyzing={analyzing} onAnalyze={handleAnalyze}
             preview={preview} onConfirm={handleConfirm} onDismiss={() => setPreview(null)}
             error={error} setError={setError}
+            recording={recording} onRecord={startVoice}
           />
         )}
 
