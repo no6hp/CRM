@@ -55,11 +55,12 @@ Heute ist: ${today}
 JSON-Schema (alle Felder optional außer type):
 {
   "type": "call" | "appointment" | "deal" | "callback",
-  "name": "Vollständiger Kundenname",
+  "name": "Vollständiger Kundenname (nur bei Einzelgesprächen)",
   "phone": "Telefonnummer",
   "result": "appointment" | "callback" | "not_interested" | "not_reached" | "won" | "lost",
+  "count": <Anzahl bei Sammeleintragungen, Standard 1, z.B. "40 Kunden angerufen" → 40>,
   "followUp": "ISO 8601 Datum+Uhrzeit des Folgetargets",
-  "dealUnits": <Anzahl Einheiten als Zahl>,
+  "dealUnits": <NUR setzen wenn type="deal" UND result="won" – Anzahl abgeschlossener Einheiten>,
   "dealProduct": "Produktname / Beratungswunsch / Thema",
   "note": "Prägnante Zusammenfassung für das CRM",
   "calendarTitle": "Name – Beratungswunsch (z.B. 'Maria Müller – Altersvorsorge')",
@@ -69,7 +70,9 @@ JSON-Schema (alle Felder optional außer type):
 Regeln:
 - "Donnerstag 14 Uhr" = nächsten Donnerstag 14:00:00
 - "08.08.26" = 2026-08-08T09:00:00
-- dealUnits = Anzahl der genannten Einheiten (z.B. "2 Einheiten" → 2)
+- count = Anzahl bei Sammeleintragungen (z.B. "40 Kunden nicht erreicht" → count:40, result:"not_reached"). Bei Einzelgesprächen weglassen oder 1.
+- dealUnits = AUSSCHLIESSLICH bei erfolgreich abgeschlossenem Geschäft (type="deal", result="won"). Niemals bei Anrufen, Terminen oder nicht erreichten Kunden setzen!
+- Bei "X Kunden angerufen" → type:"call", count:X. Die Zahl X ist KEIN dealUnits-Wert.
 - Bei result:"appointment" MÜSSEN calendarTitle und calendarNote gesetzt sein
 - calendarTitle = "<Name> – <Beratungswunsch>" (exakter Kundenname + Thema)
 - calendarNote = alle Kontaktdaten (Telefon, Adresse falls genannt) + Beratungsdetails + sonstige Notizen aus dem Text
@@ -164,6 +167,8 @@ const NAV_ITEMS = [
 ]
 
 /* ─────────────────────────── COMPUTED ─────────────────────────── */
+const cnt = (a) => a.count || 1
+
 const computeKpis = (activities, recruits = []) => {
   const calls = activities.filter((a) => a.type === 'call' || a.type === 'callback')
   const appts = activities.filter((a) => a.result === 'appointment')
@@ -171,13 +176,16 @@ const computeKpis = (activities, recruits = []) => {
   const open  = activities.filter((a) => a.result === 'appointment' && a.followUp && new Date(a.followUp) > new Date())
   const totalUnits  = won.reduce((s, d) => s + (d.dealUnits || 0), 0)
   const teamUnits   = recruits.filter((r) => r.status === 'team').reduce((s, r) => s + (r.units || 0), 0)
-  const notReached  = activities.filter((a) => a.result === 'not_reached').length
-  const callbacks   = activities.filter((a) => a.result === 'callback').length
+  const totalCallsN = calls.reduce((s, a) => s + cnt(a), 0)
+  const notReached  = activities.filter((a) => a.result === 'not_reached').reduce((s, a) => s + cnt(a), 0)
+  const callbacks   = activities.filter((a) => a.result === 'callback').reduce((s, a) => s + cnt(a), 0)
+  const wonN        = won.reduce((s, a) => s + cnt(a), 0)
+  const apptsN      = appts.reduce((s, a) => s + cnt(a), 0)
   return {
     totalRevenue:     totalUnits * 7 + teamUnits,
-    closeRate:        calls.length ? (won.length / calls.length) * 100 : 0,
-    appointmentRate:  calls.length ? (appts.length / calls.length) * 100 : 0,
-    totalCalls:       calls.length,
+    closeRate:        totalCallsN ? (wonN / totalCallsN) * 100 : 0,
+    appointmentRate:  totalCallsN ? (apptsN / totalCallsN) * 100 : 0,
+    totalCalls:       totalCallsN,
     totalUnits,
     openAppointments: open.length,
     notReached,
@@ -949,6 +957,7 @@ const LoggerView = ({ input, setInput, analyzing, onAnalyze, preview, onConfirm,
             preview.name         && { label: 'Name',         value: preview.name,                            icon: '👤' },
             preview.phone        && { label: 'Telefon',      value: preview.phone,                           icon: '📞' },
             preview.result       && { label: 'Ergebnis',     value: RESULT_BADGE[preview.result]?.label || preview.result, icon: '📋' },
+            preview.count > 1    && { label: 'Anzahl',       value: `${preview.count}×`,                     icon: '🔢' },
             preview.followUp     && { label: 'Folgetermin',  value: fmtDate(preview.followUp),              icon: '📅' },
             preview.dealUnits    && { label: 'Einheiten',    value: String(preview.dealUnits),               icon: '📦' },
             preview.dealValue    && { label: 'Wert/Einheit', value: fmt(preview.dealValue),                  icon: '💶' },
@@ -1779,6 +1788,7 @@ export default function App() {
                 preview.name         && { label: 'Name',         value: preview.name,                   icon: '👤' },
                 preview.phone        && { label: 'Telefon',      value: preview.phone,                  icon: '📞' },
                 preview.result       && { label: 'Ergebnis',     value: RESULT_BADGE[preview.result]?.label || preview.result, icon: '📋' },
+                preview.count > 1    && { label: 'Anzahl',       value: `${preview.count}×`,            icon: '🔢' },
                 preview.followUp     && { label: 'Folgetermin',  value: fmtDate(preview.followUp),     icon: '📅' },
                 preview.dealUnits    && { label: 'Einheiten',    value: String(preview.dealUnits),      icon: '📦' },
                 preview.dealValue    && { label: 'Wert/Einheit', value: fmt(preview.dealValue),         icon: '💶' },
