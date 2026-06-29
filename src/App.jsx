@@ -164,16 +164,17 @@ const NAV_ITEMS = [
 ]
 
 /* ─────────────────────────── COMPUTED ─────────────────────────── */
-const computeKpis = (activities) => {
+const computeKpis = (activities, recruits = []) => {
   const calls = activities.filter((a) => a.type === 'call' || a.type === 'callback')
   const appts = activities.filter((a) => a.result === 'appointment')
   const won   = activities.filter((a) => a.type === 'deal' && a.result === 'won')
   const open  = activities.filter((a) => a.result === 'appointment' && a.followUp && new Date(a.followUp) > new Date())
   const totalUnits  = won.reduce((s, d) => s + (d.dealUnits || 0), 0)
+  const teamUnits   = recruits.filter((r) => r.status === 'team').reduce((s, r) => s + (r.units || 0), 0)
   const notReached  = activities.filter((a) => a.result === 'not_reached').length
   const callbacks   = activities.filter((a) => a.result === 'callback').length
   return {
-    totalRevenue:     totalUnits * 7,
+    totalRevenue:     totalUnits * 7 + teamUnits,
     closeRate:        calls.length ? (won.length / calls.length) * 100 : 0,
     appointmentRate:  calls.length ? (appts.length / calls.length) * 100 : 0,
     totalCalls:       calls.length,
@@ -1087,11 +1088,103 @@ const RECRUIT_STATUSES = [
   { key: 'team',        label: 'Im Team',       icon: '🎉', color: '#10b981' },
 ]
 
-const RecruitingView = ({ recruits, onAdd, onUpdateStatus, onDelete }) => {
+/* ═══════════════════════════════════════════════════════════════════
+   COMPONENT: TeamMemberModal
+═══════════════════════════════════════════════════════════════════ */
+const TeamMemberModal = ({ member, onUpdateUnits, onClose }) => {
+  const [units, setUnits] = useState(member.units || 0)
+
+  const adj = (delta) => setUnits((u) => Math.max(0, u + delta))
+
+  const inputStyle = {
+    padding: '9px 12px', borderRadius: 8, border: '1px solid #e2e8f0',
+    fontSize: 14, color: '#0f172a', outline: 'none', background: '#fff',
+    boxSizing: 'border-box', width: '100%',
+  }
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 9000, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }} onClick={onClose}>
+      <div onClick={(e) => e.stopPropagation()} style={{
+        background: '#fff', borderRadius: '20px 20px 0 0', padding: '28px 20px',
+        width: '100%', maxWidth: 480, maxHeight: '80vh', overflowY: 'auto',
+      }}>
+        {/* header */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+          <div>
+            <div style={{ fontWeight: 800, fontSize: 20, color: '#0f172a' }}>{member.name}</div>
+            {member.phone && <a href={`tel:${member.phone}`} style={{ fontSize: 13, color: '#3b82f6', textDecoration: 'none' }}>{member.phone}</a>}
+          </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: '#94a3b8', padding: 4, lineHeight: 1 }}>✕</button>
+        </div>
+
+        {/* member since */}
+        {member.createdAt && (
+          <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 20 }}>
+            Im Team seit {new Date(member.createdAt).toLocaleDateString('de-DE', { day: '2-digit', month: 'long', year: 'numeric' })}
+          </div>
+        )}
+
+        {/* units editor */}
+        <div style={{ background: 'linear-gradient(135deg,#10b981,#059669)', borderRadius: 16, padding: '20px', marginBottom: 20, color: '#fff', textAlign: 'center' }}>
+          <div style={{ fontSize: 12, fontWeight: 600, opacity: 0.85, marginBottom: 8, letterSpacing: 1 }}>EINHEITEN</div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 16 }}>
+            <button onClick={() => adj(-1)} style={{
+              width: 44, height: 44, borderRadius: 12, border: '2px solid rgba(255,255,255,0.4)',
+              background: 'rgba(255,255,255,0.2)', color: '#fff', fontSize: 22, cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700,
+            }}>−</button>
+            <input
+              type="number" min="0"
+              value={units}
+              onChange={(e) => setUnits(Math.max(0, Number(e.target.value) || 0))}
+              style={{
+                width: 90, textAlign: 'center', fontSize: 36, fontWeight: 800,
+                background: 'rgba(255,255,255,0.15)', border: '2px solid rgba(255,255,255,0.3)',
+                borderRadius: 12, color: '#fff', outline: 'none', padding: '6px',
+              }}
+            />
+            <button onClick={() => adj(1)} style={{
+              width: 44, height: 44, borderRadius: 12, border: '2px solid rgba(255,255,255,0.4)',
+              background: 'rgba(255,255,255,0.2)', color: '#fff', fontSize: 22, cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700,
+            }}>+</button>
+          </div>
+          <div style={{ fontSize: 13, opacity: 0.85, marginTop: 10 }}>× 1 € = <strong>{units} €</strong> Umsatzbeitrag</div>
+        </div>
+
+        {member.note && (
+          <div style={{ background: '#f8fafc', borderRadius: 10, padding: '12px 14px', fontSize: 13, color: '#64748b', lineHeight: 1.5, marginBottom: 20 }}>
+            {member.note}
+          </div>
+        )}
+
+        <div style={{ display: 'flex', gap: 10, paddingBottom: 'env(safe-area-inset-bottom)' }}>
+          <button onClick={onClose} style={{
+            flex: 1, padding: '13px', borderRadius: 10, border: '1px solid #e2e8f0',
+            background: '#f8fafc', color: '#64748b', fontWeight: 600, fontSize: 14, cursor: 'pointer',
+          }}>Abbrechen</button>
+          <button onClick={() => { onUpdateUnits(member.id, units); onClose() }} style={{
+            flex: 2, padding: '13px', borderRadius: 10, border: 'none',
+            background: 'linear-gradient(135deg,#10b981,#059669)', color: '#fff',
+            fontWeight: 700, fontSize: 14, cursor: 'pointer',
+          }}>Speichern</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   VIEW: Recruiting
+═══════════════════════════════════════════════════════════════════ */
+const RecruitingView = ({ recruits, onAdd, onUpdateStatus, onDelete, onUpdateUnits }) => {
+  const [tab, setTab] = useState('pipeline')
   const [showForm, setShowForm] = useState(false)
   const [filter, setFilter] = useState('all')
   const [form, setForm] = useState({ name: '', phone: '', note: '', bvgDate: '' })
+  const [selectedMember, setSelectedMember] = useState(null)
 
+  const teamMembers = recruits.filter((r) => r.status === 'team')
   const filtered = filter === 'all' ? recruits : recruits.filter((r) => r.status === filter)
 
   const submitAdd = () => {
@@ -1103,82 +1196,157 @@ const RecruitingView = ({ recruits, onAdd, onUpdateStatus, onDelete }) => {
 
   const inputStyle = { padding: '9px 12px', borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 13, outline: 'none', fontFamily: 'inherit' }
 
+  const totalTeamUnits = teamMembers.reduce((s, r) => s + (r.units || 0), 0)
+
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
         <div>
           <div style={{ fontWeight: 800, fontSize: 16, color: '#0f172a' }}>Team-Recruiting</div>
-          <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>Potenzielle Teammitglieder · BVG-Tracking</div>
+          <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>Pipeline & Mein Team</div>
         </div>
-        <button onClick={() => setShowForm(!showForm)} style={{ background: 'linear-gradient(135deg,#7c3aed,#3b82f6)', color: '#fff', border: 'none', borderRadius: 9, padding: '9px 16px', cursor: 'pointer', fontSize: 13, fontWeight: 700 }}>
-          + Hinzufügen
-        </button>
+        {tab === 'pipeline' && (
+          <button onClick={() => setShowForm(!showForm)} style={{ background: 'linear-gradient(135deg,#7c3aed,#3b82f6)', color: '#fff', border: 'none', borderRadius: 9, padding: '9px 16px', cursor: 'pointer', fontSize: 13, fontWeight: 700 }}>
+            + Hinzufügen
+          </button>
+        )}
       </div>
 
-      {showForm && (
-        <div style={{ background: '#fff', borderRadius: 12, padding: 16, marginBottom: 14, border: '2px solid #7c3aed', boxShadow: '0 4px 16px rgba(124,58,237,0.12)' }}>
-          <div style={{ fontWeight: 700, fontSize: 14, color: '#0f172a', marginBottom: 12 }}>Neue Person</div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
-            <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Name *" style={inputStyle} />
-            <input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="Telefon" style={inputStyle} />
-          </div>
-          <input type="datetime-local" value={form.bvgDate} onChange={(e) => setForm({ ...form, bvgDate: e.target.value })} style={{ ...inputStyle, width: '100%', marginBottom: 8, display: 'block' }} />
-          <textarea value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} placeholder="Notizen..." rows={2} style={{ ...inputStyle, width: '100%', resize: 'none', display: 'block', marginBottom: 10 }} />
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button onClick={submitAdd} style={{ flex: 1, background: 'linear-gradient(135deg,#7c3aed,#3b82f6)', color: '#fff', border: 'none', borderRadius: 8, padding: '10px', cursor: 'pointer', fontSize: 13, fontWeight: 700 }}>Speichern</button>
-            <button onClick={() => setShowForm(false)} style={{ background: '#f1f5f9', color: '#64748b', border: 'none', borderRadius: 8, padding: '10px 16px', cursor: 'pointer', fontSize: 13 }}>Abbrechen</button>
-          </div>
-        </div>
-      )}
-
-      <div style={{ display: 'flex', gap: 6, marginBottom: 12, overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
-        <button onClick={() => setFilter('all')} style={{ padding: '6px 14px', borderRadius: 20, border: `1px solid ${filter === 'all' ? '#7c3aed' : '#e2e8f0'}`, cursor: 'pointer', fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap', background: filter === 'all' ? '#7c3aed' : '#fff', color: filter === 'all' ? '#fff' : '#64748b', flexShrink: 0 }}>
-          Alle ({recruits.length})
-        </button>
-        {RECRUIT_STATUSES.map((s) => (
-          <button key={s.key} onClick={() => setFilter(s.key)} style={{ padding: '6px 14px', borderRadius: 20, border: `1px solid ${filter === s.key ? s.color : '#e2e8f0'}`, cursor: 'pointer', fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap', background: filter === s.key ? s.color : '#fff', color: filter === s.key ? '#fff' : '#64748b', flexShrink: 0 }}>
-            {s.icon} {s.label} ({recruits.filter((r) => r.status === s.key).length})
-          </button>
+      {/* Tabs */}
+      <div style={{ display: 'flex', gap: 6, marginBottom: 14 }}>
+        {[
+          { key: 'pipeline', label: '📋 Pipeline' },
+          { key: 'team',     label: `🎉 Mein Team (${teamMembers.length})` },
+        ].map((t) => (
+          <button key={t.key} onClick={() => setTab(t.key)} style={{
+            padding: '8px 18px', borderRadius: 20, border: 'none', cursor: 'pointer',
+            fontSize: 13, fontWeight: 700,
+            background: tab === t.key ? 'linear-gradient(135deg,#7c3aed,#3b82f6)' : '#f1f5f9',
+            color: tab === t.key ? '#fff' : '#64748b',
+          }}>{t.label}</button>
         ))}
       </div>
 
-      {filtered.length === 0 ? (
-        <div style={{ background: '#fff', borderRadius: 12, padding: '40px', textAlign: 'center', color: '#94a3b8', fontSize: 14 }}>
-          {recruits.length === 0 ? 'Noch keine Personen. Füge potenzielle Teammitglieder hinzu!' : 'Keine Einträge für diesen Filter.'}
-        </div>
-      ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(270px, 1fr))', gap: 10 }}>
-          {filtered.map((r) => {
-            const st = RECRUIT_STATUSES.find((s) => s.key === r.status) || RECRUIT_STATUSES[0]
-            return (
-              <div key={r.id} style={{
-                background: '#fff', borderRadius: 12, padding: 14,
-                boxShadow: '0 1px 3px rgba(0,0,0,0.07)',
-                border: `1px solid ${st.color}22`, borderLeft: `3px solid ${st.color}`,
-              }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                  <div>
-                    <div style={{ fontWeight: 700, fontSize: 14, color: '#0f172a' }}>{r.name}</div>
-                    {r.phone && <a href={`tel:${r.phone}`} style={{ fontSize: 12, color: '#3b82f6', textDecoration: 'none' }}>{r.phone}</a>}
-                  </div>
-                  <button onClick={() => onDelete(r.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#cbd5e1', fontSize: 14, padding: '2px 4px' }}>✕</button>
-                </div>
-                {r.bvgDate && <div style={{ fontSize: 11, color: '#7c3aed', marginTop: 4 }}>📅 BVG: {fmtDate(r.bvgDate)}</div>}
-                {r.note && <div style={{ fontSize: 12, color: '#64748b', marginTop: 6, lineHeight: 1.4 }}>{r.note}</div>}
-                <div style={{ display: 'flex', gap: 5, marginTop: 10, flexWrap: 'wrap' }}>
-                  {RECRUIT_STATUSES.map((s) => (
-                    <button key={s.key} onClick={() => onUpdateStatus(r.id, s.key)} style={{
-                      padding: '3px 9px', borderRadius: 20, border: 'none', cursor: 'pointer',
-                      fontSize: 10, fontWeight: 600,
-                      background: r.status === s.key ? s.color : `${s.color}18`,
-                      color: r.status === s.key ? '#fff' : s.color,
-                    }}>{s.icon} {s.label}</button>
-                  ))}
-                </div>
+      {/* ── PIPELINE TAB ── */}
+      {tab === 'pipeline' && (
+        <>
+          {showForm && (
+            <div style={{ background: '#fff', borderRadius: 12, padding: 16, marginBottom: 14, border: '2px solid #7c3aed', boxShadow: '0 4px 16px rgba(124,58,237,0.12)' }}>
+              <div style={{ fontWeight: 700, fontSize: 14, color: '#0f172a', marginBottom: 12 }}>Neue Person</div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
+                <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Name *" style={inputStyle} />
+                <input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="Telefon" style={inputStyle} />
               </div>
-            )
-          })}
-        </div>
+              <input type="datetime-local" value={form.bvgDate} onChange={(e) => setForm({ ...form, bvgDate: e.target.value })} style={{ ...inputStyle, width: '100%', marginBottom: 8, display: 'block' }} />
+              <textarea value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} placeholder="Notizen..." rows={2} style={{ ...inputStyle, width: '100%', resize: 'none', display: 'block', marginBottom: 10 }} />
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button onClick={submitAdd} style={{ flex: 1, background: 'linear-gradient(135deg,#7c3aed,#3b82f6)', color: '#fff', border: 'none', borderRadius: 8, padding: '10px', cursor: 'pointer', fontSize: 13, fontWeight: 700 }}>Speichern</button>
+                <button onClick={() => setShowForm(false)} style={{ background: '#f1f5f9', color: '#64748b', border: 'none', borderRadius: 8, padding: '10px 16px', cursor: 'pointer', fontSize: 13 }}>Abbrechen</button>
+              </div>
+            </div>
+          )}
+
+          <div style={{ display: 'flex', gap: 6, marginBottom: 12, overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+            <button onClick={() => setFilter('all')} style={{ padding: '6px 14px', borderRadius: 20, border: `1px solid ${filter === 'all' ? '#7c3aed' : '#e2e8f0'}`, cursor: 'pointer', fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap', background: filter === 'all' ? '#7c3aed' : '#fff', color: filter === 'all' ? '#fff' : '#64748b', flexShrink: 0 }}>
+              Alle ({recruits.length})
+            </button>
+            {RECRUIT_STATUSES.map((s) => (
+              <button key={s.key} onClick={() => setFilter(s.key)} style={{ padding: '6px 14px', borderRadius: 20, border: `1px solid ${filter === s.key ? s.color : '#e2e8f0'}`, cursor: 'pointer', fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap', background: filter === s.key ? s.color : '#fff', color: filter === s.key ? '#fff' : '#64748b', flexShrink: 0 }}>
+                {s.icon} {s.label} ({recruits.filter((r) => r.status === s.key).length})
+              </button>
+            ))}
+          </div>
+
+          {filtered.length === 0 ? (
+            <div style={{ background: '#fff', borderRadius: 12, padding: '40px', textAlign: 'center', color: '#94a3b8', fontSize: 14 }}>
+              {recruits.length === 0 ? 'Noch keine Personen. Füge potenzielle Teammitglieder hinzu!' : 'Keine Einträge für diesen Filter.'}
+            </div>
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(270px, 1fr))', gap: 10 }}>
+              {filtered.map((r) => {
+                const st = RECRUIT_STATUSES.find((s) => s.key === r.status) || RECRUIT_STATUSES[0]
+                return (
+                  <div key={r.id} style={{ background: '#fff', borderRadius: 12, padding: 14, boxShadow: '0 1px 3px rgba(0,0,0,0.07)', border: `1px solid ${st.color}22`, borderLeft: `3px solid ${st.color}` }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                      <div>
+                        <div style={{ fontWeight: 700, fontSize: 14, color: '#0f172a' }}>{r.name}</div>
+                        {r.phone && <a href={`tel:${r.phone}`} style={{ fontSize: 12, color: '#3b82f6', textDecoration: 'none' }}>{r.phone}</a>}
+                      </div>
+                      <button onClick={() => onDelete(r.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#cbd5e1', fontSize: 14, padding: '2px 4px' }}>✕</button>
+                    </div>
+                    {r.bvgDate && <div style={{ fontSize: 11, color: '#7c3aed', marginTop: 4 }}>📅 BVG: {fmtDate(r.bvgDate)}</div>}
+                    {r.note && <div style={{ fontSize: 12, color: '#64748b', marginTop: 6, lineHeight: 1.4 }}>{r.note}</div>}
+                    <div style={{ display: 'flex', gap: 5, marginTop: 10, flexWrap: 'wrap' }}>
+                      {RECRUIT_STATUSES.map((s) => (
+                        <button key={s.key} onClick={() => onUpdateStatus(r.id, s.key)} style={{
+                          padding: '3px 9px', borderRadius: 20, border: 'none', cursor: 'pointer',
+                          fontSize: 10, fontWeight: 600,
+                          background: r.status === s.key ? s.color : `${s.color}18`,
+                          color: r.status === s.key ? '#fff' : s.color,
+                        }}>{s.icon} {s.label}</button>
+                      ))}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </>
+      )}
+
+      {/* ── MEIN TEAM TAB ── */}
+      {tab === 'team' && (
+        <>
+          {/* team revenue summary */}
+          <div style={{ background: 'linear-gradient(135deg,#10b981,#059669)', borderRadius: 14, padding: '16px 20px', marginBottom: 16, color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div>
+              <div style={{ fontSize: 12, opacity: 0.85, fontWeight: 600 }}>TEAM GESAMTUMSATZ</div>
+              <div style={{ fontSize: 28, fontWeight: 800, marginTop: 2 }}>{totalTeamUnits} €</div>
+            </div>
+            <div style={{ textAlign: 'right' }}>
+              <div style={{ fontSize: 12, opacity: 0.85 }}>Einheiten gesamt</div>
+              <div style={{ fontSize: 22, fontWeight: 800 }}>{totalTeamUnits}</div>
+            </div>
+          </div>
+
+          {teamMembers.length === 0 ? (
+            <div style={{ background: '#fff', borderRadius: 12, padding: '40px', textAlign: 'center', color: '#94a3b8', fontSize: 14 }}>
+              Noch keine Teammitglieder. Setze jemanden in der Pipeline auf „Im Team".
+            </div>
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 10 }}>
+              {teamMembers.map((r) => (
+                <button key={r.id} onClick={() => setSelectedMember(r)} style={{
+                  background: '#fff', borderRadius: 14, padding: '16px', textAlign: 'left',
+                  boxShadow: '0 1px 4px rgba(0,0,0,0.08)', border: '1px solid #d1fae5',
+                  borderLeft: '4px solid #10b981', cursor: 'pointer', width: '100%',
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                }}>
+                  <div>
+                    <div style={{ fontWeight: 700, fontSize: 15, color: '#0f172a' }}>{r.name}</div>
+                    {r.phone && <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>{r.phone}</div>}
+                    <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>
+                      Seit {r.createdAt ? new Date(r.createdAt).toLocaleDateString('de-DE') : '–'}
+                    </div>
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{ fontSize: 24, fontWeight: 800, color: '#10b981' }}>{r.units || 0}</div>
+                    <div style={{ fontSize: 10, color: '#64748b', marginTop: 1 }}>Einheiten</div>
+                    <div style={{ fontSize: 11, color: '#059669', fontWeight: 700 }}>{r.units || 0} €</div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+
+      {selectedMember && (
+        <TeamMemberModal
+          member={selectedMember}
+          onUpdateUnits={(id, units) => { onUpdateUnits(id, units); setSelectedMember(null) }}
+          onClose={() => setSelectedMember(null)}
+        />
       )}
     </div>
   )
@@ -1261,7 +1429,7 @@ export default function App() {
 
   const persist = useCallback((newData) => { setData(newData); save(newData) }, [])
   const filteredActivities = useMemo(() => filterByPeriod(data.activities, period), [data.activities, period])
-  const kpis = useMemo(() => computeKpis(filteredActivities), [filteredActivities])
+  const kpis = useMemo(() => computeKpis(filteredActivities, data.recruits || []), [filteredActivities, data.recruits])
 
   const handleAnalyze = async () => {
     if (!input.trim()) return
@@ -1355,6 +1523,10 @@ export default function App() {
 
   const handleDeleteRecruit = useCallback((id) => {
     persist({ ...data, recruits: (data.recruits || []).filter((r) => r.id !== id) })
+  }, [data, persist])
+
+  const handleUpdateRecruitUnits = useCallback((id, units) => {
+    persist({ ...data, recruits: (data.recruits || []).map((r) => r.id === id ? { ...r, units } : r) })
   }, [data, persist])
 
   const saveKey = () => {
@@ -1670,7 +1842,7 @@ export default function App() {
         {view === 'Pipeline'     && <PipelineView     activities={data.activities} />}
         {view === 'Statistiken'  && <StatisticsView  activities={filteredActivities} kpis={kpis} isMobile={isMobile} period={period} />}
         {view === 'Strategie'   && <StrategieView    customers={data.customers || []} onAdd={handleAddCustomer} onMove={handleMoveCustomer} onDelete={handleDeleteCustomer} />}
-        {view === 'Recruiting'  && <RecruitingView   recruits={data.recruits || []} onAdd={handleAddRecruit} onUpdateStatus={handleUpdateRecruitStatus} onDelete={handleDeleteRecruit} />}
+        {view === 'Recruiting'  && <RecruitingView   recruits={data.recruits || []} onAdd={handleAddRecruit} onUpdateStatus={handleUpdateRecruitStatus} onDelete={handleDeleteRecruit} onUpdateUnits={handleUpdateRecruitUnits} />}
       </main>
 
       {/* ── MOBILE BOTTOM TAB BAR ── */}
