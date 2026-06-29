@@ -310,7 +310,7 @@ const KpiTile = ({ config, value }) => (
 /* ═══════════════════════════════════════════════════════════════════
    COMPONENT: ActivityCard
 ═══════════════════════════════════════════════════════════════════ */
-const ActivityCard = ({ activity, onDelete, onEdit }) => {
+const ActivityCard = ({ activity, onDelete, onEdit, onMoveToStage }) => {
   const rb = RESULT_BADGE[activity.result] || {}
   const tb = TYPE_LABEL[activity.type] || {}
   return (
@@ -324,29 +324,15 @@ const ActivityCard = ({ activity, onDelete, onEdit }) => {
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         fontSize: 20, flexShrink: 0,
       }}>{tb.icon}</div>
+
+      {/* main content */}
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
-          <div style={{ minWidth: 0 }}>
-            <span style={{ fontWeight: 700, fontSize: 14, color: '#0f172a' }}>{activity.name || 'Unbekannt'}</span>
-            {activity.phone && (
-              <a href={`tel:${activity.phone}`} style={{ color: '#64748b', fontSize: 12, marginLeft: 8, textDecoration: 'none' }}>
-                {activity.phone}
-              </a>
-            )}
-          </div>
-          <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
-            <button onClick={() => onEdit(activity)} style={{
-              background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8',
-              fontSize: 14, padding: '4px', lineHeight: 1, borderRadius: 4,
-              minWidth: 28, minHeight: 28, display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }}>✏️</button>
-            <button onClick={() => onDelete(activity.id)} style={{
-              background: 'none', border: 'none', cursor: 'pointer', color: '#cbd5e1',
-              fontSize: 16, padding: '4px', lineHeight: 1, borderRadius: 4,
-              minWidth: 28, minHeight: 28, display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }}>✕</button>
-          </div>
-        </div>
+        <span style={{ fontWeight: 700, fontSize: 14, color: '#0f172a' }}>{activity.name || 'Unbekannt'}</span>
+        {activity.phone && (
+          <a href={`tel:${activity.phone}`} style={{ color: '#64748b', fontSize: 12, marginLeft: 8, textDecoration: 'none' }}>
+            {activity.phone}
+          </a>
+        )}
         {activity.note && (
           <div style={{ fontSize: 13, color: '#64748b', marginTop: 4, lineHeight: 1.4 }}>{activity.note}</div>
         )}
@@ -376,6 +362,31 @@ const ActivityCard = ({ activity, onDelete, onEdit }) => {
             📥 In Kalender speichern (.ics)
           </button>
         )}
+      </div>
+
+      {/* right action column */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-end', flexShrink: 0 }}>
+        {/* edit + delete */}
+        <div style={{ display: 'flex', gap: 2 }}>
+          <button onClick={() => onEdit(activity)} title="Bearbeiten" style={{
+            background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8',
+            fontSize: 14, padding: '4px', lineHeight: 1, borderRadius: 4,
+            minWidth: 28, minHeight: 28, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>✏️</button>
+          <button onClick={() => onDelete(activity.id)} title="Löschen" style={{
+            background: 'none', border: 'none', cursor: 'pointer', color: '#cbd5e1',
+            fontSize: 16, padding: '4px', lineHeight: 1, borderRadius: 4,
+            minWidth: 28, minHeight: 28, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>✕</button>
+        </div>
+        {/* Strategie stage buttons */}
+        {STRATEGY_STAGES.map((s) => (
+          <button key={s.key} onClick={() => onMoveToStage(activity, s.key)} title={s.label} style={{
+            padding: '4px 10px', borderRadius: 6, border: `1.5px solid ${s.color}`,
+            background: 'transparent', color: s.color, fontSize: 11, fontWeight: 700,
+            cursor: 'pointer', lineHeight: 1, minWidth: 38,
+          }}>{s.short}</button>
+        ))}
       </div>
     </div>
   )
@@ -595,7 +606,7 @@ const DashboardView = ({ kpis, activities, isMobile, period }) => {
 /* ═══════════════════════════════════════════════════════════════════
    VIEW: Aktivitäten
 ═══════════════════════════════════════════════════════════════════ */
-const ActivitiesView = ({ activities, onDelete, onEdit }) => {
+const ActivitiesView = ({ activities, onDelete, onEdit, onMoveToStage }) => {
   const [filter, setFilter] = useState('all')
   const [search, setSearch] = useState('')
   const [editing, setEditing] = useState(null)
@@ -655,7 +666,7 @@ const ActivitiesView = ({ activities, onDelete, onEdit }) => {
             Keine Aktivitäten gefunden.
           </div>
         ) : (
-          filtered.map((a) => <ActivityCard key={a.id} activity={a} onDelete={onDelete} onEdit={setEditing} />)
+          filtered.map((a) => <ActivityCard key={a.id} activity={a} onDelete={onDelete} onEdit={setEditing} onMoveToStage={onMoveToStage} />)
         )}
       </div>
 
@@ -1308,6 +1319,18 @@ export default function App() {
     persist({ ...data, activities: data.activities.map((a) => a.id === id ? { ...a, ...fields } : a) })
   }, [data, persist])
 
+  const handleMoveToStage = useCallback((activity, stage) => {
+    const customers = data.customers || []
+    const existingIdx = customers.findIndex((c) => c.name?.toLowerCase() === activity.name?.toLowerCase())
+    let newCustomers
+    if (existingIdx >= 0) {
+      newCustomers = customers.map((c, i) => i === existingIdx ? { ...c, stage } : c)
+    } else {
+      newCustomers = [{ id: uid(), name: activity.name, phone: activity.phone || '', note: [activity.dealProduct, activity.note].filter(Boolean).join(' – '), date: activity.followUp || '', stage, createdAt: now() }, ...customers]
+    }
+    persist({ ...data, customers: newCustomers })
+  }, [data, persist])
+
   const handleAddCustomer = useCallback((fields) => {
     const c = { id: uid(), ...fields, createdAt: now() }
     persist({ ...data, customers: [c, ...(data.customers || [])] })
@@ -1643,7 +1666,7 @@ export default function App() {
 
         {/* ── MAIN VIEWS ── */}
         {view === 'Dashboard'    && <DashboardView   kpis={kpis} activities={filteredActivities} isMobile={isMobile} period={period} />}
-        {view === 'Aktivitäten' && <ActivitiesView   activities={data.activities} onDelete={handleDelete} onEdit={handleEditActivity} />}
+        {view === 'Aktivitäten' && <ActivitiesView   activities={data.activities} onDelete={handleDelete} onEdit={handleEditActivity} onMoveToStage={handleMoveToStage} />}
         {view === 'Pipeline'     && <PipelineView     activities={data.activities} />}
         {view === 'Statistiken'  && <StatisticsView  activities={filteredActivities} kpis={kpis} isMobile={isMobile} period={period} />}
         {view === 'Strategie'   && <StrategieView    customers={data.customers || []} onAdd={handleAddCustomer} onMove={handleMoveCustomer} onDelete={handleDeleteCustomer} />}
