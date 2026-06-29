@@ -850,6 +850,7 @@ export default function App() {
   const [recording, setRecording] = useState(false)
   const recognitionRef = useRef(null)
   const recordingRef = useRef(false)
+  const importRef = useRef(null)
 
   const startVoice = useCallback(() => {
     if (recordingRef.current) { recognitionRef.current?.stop(); return }
@@ -931,8 +932,43 @@ export default function App() {
   const saveKey = () => {
     persist({ ...data, apiKey: tempKey })
     setShowApiKey(false)
-    setSuccess('API-Key gespeichert')
-    setTimeout(() => setSuccess(''), 2000)
+    setSuccess('API-Key gespeichert ✓ – wird dauerhaft in dieser App gespeichert')
+    setTimeout(() => setSuccess(''), 4000)
+  }
+
+  const handleExport = () => {
+    const json = JSON.stringify(data, null, 2)
+    const blob = new Blob([json], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `FinCRM-${new Date().toISOString().slice(0, 10)}.json`
+    document.body.appendChild(a); a.click(); document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+    setSuccess(`✓ ${data.activities.length} Einträge exportiert`)
+    setTimeout(() => setSuccess(''), 3000)
+  }
+
+  const handleImport = (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = (ev) => {
+      try {
+        const imported = JSON.parse(ev.target.result)
+        if (!Array.isArray(imported.activities)) throw new Error('Ungültiges Format')
+        const merged = { ...defaultData(), ...imported }
+        persist(merged)
+        setTempKey(merged.apiKey || '')
+        setShowApiKey(false)
+        setSuccess(`✓ Import erfolgreich: ${merged.activities.length} Einträge geladen`)
+        setTimeout(() => setSuccess(''), 5000)
+      } catch {
+        setError('Import fehlgeschlagen – bitte eine gültige FinCRM-JSON-Datei wählen.')
+      }
+    }
+    reader.readAsText(file)
+    e.target.value = ''
   }
 
   /* Bottom padding to clear the fixed bottom tab bar on mobile */
@@ -1003,28 +1039,55 @@ export default function App() {
         </button>
       </header>
 
-      {/* ── API KEY PANEL ── */}
+      {/* ── EINSTELLUNGEN PANEL ── */}
       {showApiKey && (
-        <div style={{ background: '#1e293b', borderBottom: '1px solid #334155', padding: '12px 16px', display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: 10, alignItems: isMobile ? 'stretch' : 'center' }}>
-          <span style={{ color: '#64748b', fontSize: 13, flexShrink: 0 }}>Anthropic API-Key:</span>
-          <input
-            type="password"
-            value={tempKey}
-            onChange={(e) => setTempKey(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter') saveKey() }}
-            placeholder="sk-ant-api03-…"
-            autoFocus
-            style={{ flex: 1, padding: '9px 12px', borderRadius: 7, border: '1px solid #334155', background: '#0f172a', color: '#e2e8f0', fontSize: 14, outline: 'none' }}
-          />
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button onClick={saveKey} style={{ flex: 1, background: '#7c3aed', color: '#fff', border: 'none', borderRadius: 7, padding: '9px 18px', cursor: 'pointer', fontSize: 14, fontWeight: 600, minHeight: 42 }}>
-              Speichern
-            </button>
-            <button onClick={() => setShowApiKey(false)} style={{ background: '#334155', border: 'none', borderRadius: 7, color: '#94a3b8', padding: '9px 12px', cursor: 'pointer', fontSize: 16, minHeight: 42 }}>✕</button>
+        <div style={{ background: '#1e293b', borderBottom: '1px solid #334155', padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+
+          {/* API Key row */}
+          <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: 8, alignItems: isMobile ? 'stretch' : 'center' }}>
+            <span style={{ color: '#64748b', fontSize: 13, flexShrink: 0 }}>🔑 Anthropic API-Key:</span>
+            <input
+              type="password"
+              value={tempKey}
+              onChange={(e) => setTempKey(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') saveKey() }}
+              placeholder="sk-ant-api03-…"
+              autoFocus
+              style={{ flex: 1, padding: '9px 12px', borderRadius: 7, border: '1px solid #334155', background: '#0f172a', color: '#e2e8f0', fontSize: 14, outline: 'none' }}
+            />
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={saveKey} style={{ flex: 1, background: '#7c3aed', color: '#fff', border: 'none', borderRadius: 7, padding: '9px 18px', cursor: 'pointer', fontSize: 14, fontWeight: 600, minHeight: 42 }}>
+                Speichern
+              </button>
+              <button onClick={() => setShowApiKey(false)} style={{ background: '#334155', border: 'none', borderRadius: 7, color: '#94a3b8', padding: '9px 12px', cursor: 'pointer', fontSize: 16, minHeight: 42 }}>✕</button>
+            </div>
           </div>
-          <span style={{ color: '#475569', fontSize: 11, textAlign: isMobile ? 'center' : 'left' }}>
-            Nur lokal gespeichert – kein Server.
-          </span>
+
+          {/* Divider */}
+          <div style={{ borderTop: '1px solid #334155', paddingTop: 10 }}>
+            <div style={{ color: '#94a3b8', fontSize: 12, marginBottom: 8 }}>
+              📲 <strong style={{ color: '#cbd5e1' }}>Daten übertragen (Safari ↔ Home-Screen-App)</strong>
+              <span style={{ display: 'block', marginTop: 3, color: '#475569' }}>
+                Safari und die Home-Screen-App haben getrennte Datenspeicher. Exportiere hier und importiere in der anderen Version.
+              </span>
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={handleExport} style={{
+                flex: 1, background: '#0f172a', color: '#e2e8f0', border: '1px solid #334155',
+                borderRadius: 7, padding: '9px 14px', cursor: 'pointer', fontSize: 13, fontWeight: 600, minHeight: 40,
+              }}>
+                ⬇ Exportieren (.json)
+              </button>
+              <label style={{
+                flex: 1, background: '#0f172a', color: '#e2e8f0', border: '1px solid #334155',
+                borderRadius: 7, padding: '9px 14px', cursor: 'pointer', fontSize: 13, fontWeight: 600, minHeight: 40,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}>
+                ⬆ Importieren (.json)
+                <input ref={importRef} type="file" accept=".json" onChange={handleImport} style={{ display: 'none' }} />
+              </label>
+            </div>
+          </div>
         </div>
       )}
 
