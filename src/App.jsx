@@ -17,7 +17,7 @@ function useWindowWidth() {
 
 /* ─────────────────────────── STORAGE ─────────────────────────── */
 const STORAGE_KEY = 'fincrm_v3'
-const defaultData = () => ({ activities: [], apiKey: '' })
+const defaultData = () => ({ activities: [], apiKey: '', customers: [], recruits: [] })
 
 const load = () => {
   try {
@@ -146,12 +146,14 @@ const TYPE_LABEL = {
 const CHART_COLORS = ['#7c3aed', '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#06b6d4']
 
 const KPI_CONFIG = [
-  { key: 'totalRevenue',     label: 'Gesamtumsatz',   format: (v) => String(v),          gradient: 'linear-gradient(135deg,#6d28d9,#7c3aed)', icon: '💶' },
+  { key: 'totalRevenue',     label: 'Gesamtumsatz',   format: (v) => String(v),           gradient: 'linear-gradient(135deg,#6d28d9,#7c3aed)', icon: '💶' },
   { key: 'closeRate',        label: 'Abschlussquote', format: (v) => `${v.toFixed(1)} %`, gradient: 'linear-gradient(135deg,#1d4ed8,#2563eb)', icon: '🎯' },
   { key: 'appointmentRate',  label: 'Terminquote',    format: (v) => `${v.toFixed(1)} %`, gradient: 'linear-gradient(135deg,#0369a1,#0284c7)', icon: '📅' },
-  { key: 'totalCalls',       label: 'Anrufe gesamt',  format: (v) => v,                  gradient: 'linear-gradient(135deg,#0f766e,#0d9488)', icon: '📞' },
-  { key: 'totalUnits',       label: 'Einheiten',      format: (v) => v,                  gradient: 'linear-gradient(135deg,#5b21b6,#6d28d9)', icon: '📦' },
-  { key: 'openAppointments', label: 'Offene Termine', format: (v) => v,                  gradient: 'linear-gradient(135deg,#1e40af,#1d4ed8)', icon: '🗓' },
+  { key: 'totalCalls',       label: 'Anrufe gesamt',  format: (v) => v,                   gradient: 'linear-gradient(135deg,#0f766e,#0d9488)', icon: '📞' },
+  { key: 'notReached',       label: 'Nicht erreicht', format: (v) => v,                   gradient: 'linear-gradient(135deg,#7f1d1d,#991b1b)', icon: '📵' },
+  { key: 'callbacks',        label: 'Rückrufe',       format: (v) => v,                   gradient: 'linear-gradient(135deg,#164e63,#0e7490)', icon: '🔄' },
+  { key: 'totalUnits',       label: 'Einheiten',      format: (v) => v,                   gradient: 'linear-gradient(135deg,#5b21b6,#6d28d9)', icon: '📦' },
+  { key: 'openAppointments', label: 'Offene Termine', format: (v) => v,                   gradient: 'linear-gradient(135deg,#1e40af,#1d4ed8)', icon: '🗓' },
 ]
 
 const NAV_ITEMS = [
@@ -167,7 +169,9 @@ const computeKpis = (activities) => {
   const appts = activities.filter((a) => a.result === 'appointment')
   const won   = activities.filter((a) => a.type === 'deal' && a.result === 'won')
   const open  = activities.filter((a) => a.result === 'appointment' && a.followUp && new Date(a.followUp) > new Date())
-  const totalUnits = won.reduce((s, d) => s + (d.dealUnits || 0), 0)
+  const totalUnits  = won.reduce((s, d) => s + (d.dealUnits || 0), 0)
+  const notReached  = activities.filter((a) => a.result === 'not_reached').length
+  const callbacks   = activities.filter((a) => a.result === 'callback').length
   return {
     totalRevenue:     totalUnits * 7,
     closeRate:        calls.length ? (won.length / calls.length) * 100 : 0,
@@ -175,6 +179,8 @@ const computeKpis = (activities) => {
     totalCalls:       calls.length,
     totalUnits,
     openAppointments: open.length,
+    notReached,
+    callbacks,
   }
 }
 
@@ -831,6 +837,213 @@ const LoggerView = ({ input, setInput, analyzing, onAnalyze, preview, onConfirm,
 )
 
 /* ═══════════════════════════════════════════════════════════════════
+   VIEW: Strategie (GB → Informationsberatung → AT)
+═══════════════════════════════════════════════════════════════════ */
+const STRATEGY_STAGES = [
+  { key: 'GB',   label: 'Grundberatung',        short: 'GB',   icon: '📋', color: '#3b82f6' },
+  { key: 'Info', label: 'Informationsberatung',  short: 'Info', icon: '📊', color: '#8b5cf6' },
+  { key: 'AT',   label: 'Abschlusstermin',       short: 'AT',   icon: '🏆', color: '#10b981' },
+]
+
+const StrategieView = ({ customers, onAdd, onMove, onDelete }) => {
+  const [addingTo, setAddingTo] = useState(null)
+  const [form, setForm] = useState({ name: '', phone: '', note: '', date: '' })
+
+  const byStage = useMemo(() => STRATEGY_STAGES.reduce((acc, s) => {
+    acc[s.key] = customers.filter((c) => c.stage === s.key)
+    return acc
+  }, {}), [customers])
+
+  const submitAdd = (stageKey) => {
+    if (!form.name.trim()) return
+    onAdd({ ...form, stage: stageKey })
+    setForm({ name: '', phone: '', note: '', date: '' })
+    setAddingTo(null)
+  }
+
+  const inputStyle = {
+    width: '100%', padding: '8px 10px', borderRadius: 7,
+    border: '1px solid #e2e8f0', fontSize: 13, outline: 'none',
+    marginBottom: 6, fontFamily: 'inherit',
+  }
+
+  return (
+    <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', paddingBottom: 8 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(240px, 1fr))', gap: 12, minWidth: 560 }}>
+        {STRATEGY_STAGES.map((stage, si) => (
+          <div key={stage.key}>
+            <div style={{ marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ fontSize: 15 }}>{stage.icon}</span>
+              <span style={{ fontWeight: 700, fontSize: 13, color: stage.color }}>{stage.label}</span>
+              <span style={{ marginLeft: 'auto', background: `${stage.color}22`, color: stage.color, borderRadius: 20, padding: '1px 8px', fontSize: 11, fontWeight: 700 }}>
+                {byStage[stage.key].length}
+              </span>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {byStage[stage.key].map((c) => (
+                <div key={c.id} style={{
+                  background: '#fff', borderRadius: 10, padding: 12,
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.07)',
+                  border: `1px solid ${stage.color}22`, borderLeft: `3px solid ${stage.color}`,
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <div style={{ fontWeight: 700, fontSize: 13, color: '#0f172a' }}>{c.name}</div>
+                    <button onClick={() => onDelete(c.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#cbd5e1', fontSize: 14, padding: '2px 4px', lineHeight: 1 }}>✕</button>
+                  </div>
+                  {c.phone && <a href={`tel:${c.phone}`} style={{ display: 'block', fontSize: 11, color: '#3b82f6', marginTop: 2, textDecoration: 'none' }}>{c.phone}</a>}
+                  {c.date && <div style={{ fontSize: 11, color: '#7c3aed', marginTop: 2 }}>📅 {fmtDate(c.date)}</div>}
+                  {c.note && <div style={{ fontSize: 11, color: '#64748b', marginTop: 4, lineHeight: 1.4 }}>{c.note}</div>}
+                  {si < STRATEGY_STAGES.length - 1 && (
+                    <button onClick={() => onMove(c.id, STRATEGY_STAGES[si + 1].key)} style={{
+                      marginTop: 8, width: '100%', background: `${STRATEGY_STAGES[si + 1].color}12`,
+                      color: STRATEGY_STAGES[si + 1].color, border: `1px solid ${STRATEGY_STAGES[si + 1].color}44`,
+                      borderRadius: 6, padding: '5px 8px', cursor: 'pointer', fontSize: 11, fontWeight: 600,
+                    }}>→ {STRATEGY_STAGES[si + 1].short}</button>
+                  )}
+                  {si === STRATEGY_STAGES.length - 1 && (
+                    <button onClick={() => onDelete(c.id)} style={{
+                      marginTop: 8, width: '100%', background: '#d1fae520',
+                      color: '#059669', border: '1px solid #059669',
+                      borderRadius: 6, padding: '5px 8px', cursor: 'pointer', fontSize: 11, fontWeight: 600,
+                    }}>✓ Abschluss fertig</button>
+                  )}
+                </div>
+              ))}
+
+              {addingTo === stage.key ? (
+                <div style={{ background: '#fff', borderRadius: 10, padding: 12, border: `2px solid ${stage.color}`, boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}>
+                  <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Name *" style={inputStyle} />
+                  <input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="Telefon" style={inputStyle} />
+                  <input type="datetime-local" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} style={inputStyle} />
+                  <textarea value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} placeholder="Notiz" rows={2} style={{ ...inputStyle, resize: 'none', marginBottom: 8 }} />
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <button onClick={() => submitAdd(stage.key)} style={{ flex: 1, background: stage.color, color: '#fff', border: 'none', borderRadius: 7, padding: '8px', cursor: 'pointer', fontSize: 12, fontWeight: 700 }}>Hinzufügen</button>
+                    <button onClick={() => setAddingTo(null)} style={{ background: '#f1f5f9', color: '#64748b', border: 'none', borderRadius: 7, padding: '8px 12px', cursor: 'pointer', fontSize: 13 }}>✕</button>
+                  </div>
+                </div>
+              ) : (
+                <button onClick={() => setAddingTo(stage.key)} style={{
+                  width: '100%', padding: '10px', background: '#f8fafc',
+                  border: `2px dashed ${stage.color}55`, borderRadius: 10,
+                  cursor: 'pointer', color: stage.color, fontSize: 12, fontWeight: 600,
+                }}>+ Kunde hinzufügen</button>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   VIEW: Recruiting (BVG-Tracking)
+═══════════════════════════════════════════════════════════════════ */
+const RECRUIT_STATUSES = [
+  { key: 'neu',         label: 'Interessent',  icon: '⭐', color: '#64748b' },
+  { key: 'kontaktiert', label: 'Kontaktiert',  icon: '📞', color: '#3b82f6' },
+  { key: 'bvg',         label: 'BVG geplant',  icon: '📅', color: '#8b5cf6' },
+  { key: 'team',        label: 'Im Team',       icon: '🎉', color: '#10b981' },
+]
+
+const RecruitingView = ({ recruits, onAdd, onUpdateStatus, onDelete }) => {
+  const [showForm, setShowForm] = useState(false)
+  const [filter, setFilter] = useState('all')
+  const [form, setForm] = useState({ name: '', phone: '', note: '', bvgDate: '' })
+
+  const filtered = filter === 'all' ? recruits : recruits.filter((r) => r.status === filter)
+
+  const submitAdd = () => {
+    if (!form.name.trim()) return
+    onAdd({ ...form, status: 'neu' })
+    setForm({ name: '', phone: '', note: '', bvgDate: '' })
+    setShowForm(false)
+  }
+
+  const inputStyle = { padding: '9px 12px', borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 13, outline: 'none', fontFamily: 'inherit' }
+
+  return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+        <div>
+          <div style={{ fontWeight: 800, fontSize: 16, color: '#0f172a' }}>Team-Recruiting</div>
+          <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>Potenzielle Teammitglieder · BVG-Tracking</div>
+        </div>
+        <button onClick={() => setShowForm(!showForm)} style={{ background: 'linear-gradient(135deg,#7c3aed,#3b82f6)', color: '#fff', border: 'none', borderRadius: 9, padding: '9px 16px', cursor: 'pointer', fontSize: 13, fontWeight: 700 }}>
+          + Hinzufügen
+        </button>
+      </div>
+
+      {showForm && (
+        <div style={{ background: '#fff', borderRadius: 12, padding: 16, marginBottom: 14, border: '2px solid #7c3aed', boxShadow: '0 4px 16px rgba(124,58,237,0.12)' }}>
+          <div style={{ fontWeight: 700, fontSize: 14, color: '#0f172a', marginBottom: 12 }}>Neue Person</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
+            <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Name *" style={inputStyle} />
+            <input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="Telefon" style={inputStyle} />
+          </div>
+          <input type="datetime-local" value={form.bvgDate} onChange={(e) => setForm({ ...form, bvgDate: e.target.value })} style={{ ...inputStyle, width: '100%', marginBottom: 8, display: 'block' }} />
+          <textarea value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} placeholder="Notizen..." rows={2} style={{ ...inputStyle, width: '100%', resize: 'none', display: 'block', marginBottom: 10 }} />
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={submitAdd} style={{ flex: 1, background: 'linear-gradient(135deg,#7c3aed,#3b82f6)', color: '#fff', border: 'none', borderRadius: 8, padding: '10px', cursor: 'pointer', fontSize: 13, fontWeight: 700 }}>Speichern</button>
+            <button onClick={() => setShowForm(false)} style={{ background: '#f1f5f9', color: '#64748b', border: 'none', borderRadius: 8, padding: '10px 16px', cursor: 'pointer', fontSize: 13 }}>Abbrechen</button>
+          </div>
+        </div>
+      )}
+
+      <div style={{ display: 'flex', gap: 6, marginBottom: 12, overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+        <button onClick={() => setFilter('all')} style={{ padding: '6px 14px', borderRadius: 20, border: `1px solid ${filter === 'all' ? '#7c3aed' : '#e2e8f0'}`, cursor: 'pointer', fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap', background: filter === 'all' ? '#7c3aed' : '#fff', color: filter === 'all' ? '#fff' : '#64748b', flexShrink: 0 }}>
+          Alle ({recruits.length})
+        </button>
+        {RECRUIT_STATUSES.map((s) => (
+          <button key={s.key} onClick={() => setFilter(s.key)} style={{ padding: '6px 14px', borderRadius: 20, border: `1px solid ${filter === s.key ? s.color : '#e2e8f0'}`, cursor: 'pointer', fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap', background: filter === s.key ? s.color : '#fff', color: filter === s.key ? '#fff' : '#64748b', flexShrink: 0 }}>
+            {s.icon} {s.label} ({recruits.filter((r) => r.status === s.key).length})
+          </button>
+        ))}
+      </div>
+
+      {filtered.length === 0 ? (
+        <div style={{ background: '#fff', borderRadius: 12, padding: '40px', textAlign: 'center', color: '#94a3b8', fontSize: 14 }}>
+          {recruits.length === 0 ? 'Noch keine Personen. Füge potenzielle Teammitglieder hinzu!' : 'Keine Einträge für diesen Filter.'}
+        </div>
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(270px, 1fr))', gap: 10 }}>
+          {filtered.map((r) => {
+            const st = RECRUIT_STATUSES.find((s) => s.key === r.status) || RECRUIT_STATUSES[0]
+            return (
+              <div key={r.id} style={{
+                background: '#fff', borderRadius: 12, padding: 14,
+                boxShadow: '0 1px 3px rgba(0,0,0,0.07)',
+                border: `1px solid ${st.color}22`, borderLeft: `3px solid ${st.color}`,
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                  <div>
+                    <div style={{ fontWeight: 700, fontSize: 14, color: '#0f172a' }}>{r.name}</div>
+                    {r.phone && <a href={`tel:${r.phone}`} style={{ fontSize: 12, color: '#3b82f6', textDecoration: 'none' }}>{r.phone}</a>}
+                  </div>
+                  <button onClick={() => onDelete(r.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#cbd5e1', fontSize: 14, padding: '2px 4px' }}>✕</button>
+                </div>
+                {r.bvgDate && <div style={{ fontSize: 11, color: '#7c3aed', marginTop: 4 }}>📅 BVG: {fmtDate(r.bvgDate)}</div>}
+                {r.note && <div style={{ fontSize: 12, color: '#64748b', marginTop: 6, lineHeight: 1.4 }}>{r.note}</div>}
+                <div style={{ display: 'flex', gap: 5, marginTop: 10, flexWrap: 'wrap' }}>
+                  {RECRUIT_STATUSES.map((s) => (
+                    <button key={s.key} onClick={() => onUpdateStatus(r.id, s.key)} style={{
+                      padding: '3px 9px', borderRadius: 20, border: 'none', cursor: 'pointer',
+                      fontSize: 10, fontWeight: 600,
+                      background: r.status === s.key ? s.color : `${s.color}18`,
+                      color: r.status === s.key ? '#fff' : s.color,
+                    }}>{s.icon} {s.label}</button>
+                  ))}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/* ═══════════════════════════════════════════════════════════════════
    ROOT APP
 ═══════════════════════════════════════════════════════════════════ */
 export default function App() {
@@ -929,6 +1142,32 @@ export default function App() {
     persist({ ...data, activities: data.activities.filter((a) => a.id !== id) })
   }, [data, persist])
 
+  const handleAddCustomer = useCallback((fields) => {
+    const c = { id: uid(), ...fields, createdAt: now() }
+    persist({ ...data, customers: [c, ...(data.customers || [])] })
+  }, [data, persist])
+
+  const handleMoveCustomer = useCallback((id, stage) => {
+    persist({ ...data, customers: (data.customers || []).map((c) => c.id === id ? { ...c, stage } : c) })
+  }, [data, persist])
+
+  const handleDeleteCustomer = useCallback((id) => {
+    persist({ ...data, customers: (data.customers || []).filter((c) => c.id !== id) })
+  }, [data, persist])
+
+  const handleAddRecruit = useCallback((fields) => {
+    const r = { id: uid(), ...fields, createdAt: now() }
+    persist({ ...data, recruits: [r, ...(data.recruits || [])] })
+  }, [data, persist])
+
+  const handleUpdateRecruitStatus = useCallback((id, status) => {
+    persist({ ...data, recruits: (data.recruits || []).map((r) => r.id === id ? { ...r, status } : r) })
+  }, [data, persist])
+
+  const handleDeleteRecruit = useCallback((id) => {
+    persist({ ...data, recruits: (data.recruits || []).filter((r) => r.id !== id) })
+  }, [data, persist])
+
   const saveKey = () => {
     persist({ ...data, apiKey: tempKey })
     setShowApiKey(false)
@@ -978,9 +1217,11 @@ export default function App() {
   const mobileNavItems = [
     { key: 'Dashboard',    icon: '◼', label: 'Dashboard' },
     { key: 'Logger',       icon: '✨', label: 'Logger' },
-    { key: 'Aktivitäten', icon: '≡',  label: 'Aktivitäten' },
+    { key: 'Aktivitäten', icon: '≡',  label: 'Aktivit.' },
+    { key: 'Strategie',   icon: '🎯', label: 'Strategie' },
+    { key: 'Recruiting',  icon: '👥', label: 'Recruiting' },
     { key: 'Pipeline',     icon: '⬦', label: 'Pipeline' },
-    { key: 'Statistiken',  icon: '↗', label: 'Statistiken' },
+    { key: 'Statistiken',  icon: '↗', label: 'Statistik' },
   ]
 
   return (
@@ -1007,10 +1248,10 @@ export default function App() {
 
         {/* Desktop nav */}
         {!isMobile && (
-          <nav style={{ flex: 1, display: 'flex', justifyContent: 'center', gap: 2 }}>
-            {['Dashboard', 'Aktivitäten', 'Pipeline', 'Statistiken'].map((n) => (
+          <nav style={{ flex: 1, display: 'flex', justifyContent: 'center', gap: 2, flexWrap: 'wrap' }}>
+            {['Dashboard', 'Aktivitäten', 'Pipeline', 'Strategie', 'Recruiting', 'Statistiken'].map((n) => (
               <button key={n} onClick={() => setView(n)} style={{
-                padding: '7px 16px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 500,
+                padding: '7px 14px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 500,
                 background: view === n ? '#1e293b' : 'transparent',
                 color: view === n ? '#e2e8f0' : '#64748b',
               }}>{n}</button>
@@ -1212,7 +1453,7 @@ export default function App() {
         )}
 
         {/* ── ZEITRAUM-FILTER ── */}
-        {view !== 'Logger' && view !== 'Aktivitäten' && view !== 'Pipeline' && (
+        {view !== 'Logger' && view !== 'Aktivitäten' && view !== 'Pipeline' && view !== 'Strategie' && view !== 'Recruiting' && (
           <div style={{ display: 'flex', gap: 6, marginBottom: 14, overflowX: 'auto', WebkitOverflowScrolling: 'touch', paddingBottom: 2 }}>
             {[
               { key: 'all', label: 'Gesamt' },
@@ -1239,6 +1480,8 @@ export default function App() {
         {view === 'Aktivitäten' && <ActivitiesView   activities={data.activities} onDelete={handleDelete} />}
         {view === 'Pipeline'     && <PipelineView     activities={data.activities} />}
         {view === 'Statistiken'  && <StatisticsView  activities={filteredActivities} kpis={kpis} isMobile={isMobile} period={period} />}
+        {view === 'Strategie'   && <StrategieView    customers={data.customers || []} onAdd={handleAddCustomer} onMove={handleMoveCustomer} onDelete={handleDeleteCustomer} />}
+        {view === 'Recruiting'  && <RecruitingView   recruits={data.recruits || []} onAdd={handleAddRecruit} onUpdateStatus={handleUpdateRecruitStatus} onDelete={handleDeleteRecruit} />}
       </main>
 
       {/* ── MOBILE BOTTOM TAB BAR ── */}
@@ -1247,7 +1490,8 @@ export default function App() {
           position: 'fixed', bottom: 0, left: 0, right: 0,
           background: '#0f172a', borderTop: '1px solid #1e293b',
           display: 'flex', paddingBottom: 'env(safe-area-inset-bottom)',
-          zIndex: 300,
+          zIndex: 300, overflowX: 'auto', WebkitOverflowScrolling: 'touch',
+          scrollbarWidth: 'none',
         }}>
           {mobileNavItems.map((item) => {
             const active = view === item.key
