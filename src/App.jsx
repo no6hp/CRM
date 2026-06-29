@@ -1097,9 +1097,25 @@ export default function App() {
 
   useEffect(() => {
     const d = load()
-    setData(d)
-    setTempKey(d.apiKey || '')
-    if (!d.apiKey) setShowApiKey(true)
+    const existingNames = new Set((d.customers || []).map((c) => c.name?.toLowerCase()))
+    const toAdd = (d.activities || [])
+      .filter((a) => a.result === 'appointment' && a.name && !existingNames.has(a.name.toLowerCase()))
+      .map((a) => ({
+        id: uid(),
+        name: a.name,
+        phone: a.phone || '',
+        note: [a.dealProduct, a.note].filter(Boolean).join(' – '),
+        date: a.followUp || '',
+        stage: 'GB',
+        createdAt: a.createdAt,
+      }))
+    const migrated = toAdd.length > 0
+      ? { ...d, customers: [...toAdd, ...(d.customers || [])] }
+      : d
+    if (toAdd.length > 0) save(migrated)
+    setData(migrated)
+    setTempKey(migrated.apiKey || '')
+    if (!migrated.apiKey) setShowApiKey(true)
   }, [])
 
   const persist = useCallback((newData) => { setData(newData); save(newData) }, [])
@@ -1121,8 +1137,24 @@ export default function App() {
   const handleConfirm = () => {
     if (!preview) return
     const activity = { id: uid(), ...preview, createdAt: now() }
-    persist({ ...data, activities: [activity, ...data.activities] })
     const isAppointment = preview.result === 'appointment' || preview.type === 'appointment'
+    let newData = { ...data, activities: [activity, ...data.activities] }
+    if (isAppointment && preview.name) {
+      const existingNames = new Set((newData.customers || []).map((c) => c.name?.toLowerCase()))
+      if (!existingNames.has(preview.name.toLowerCase())) {
+        const customer = {
+          id: uid(),
+          name: preview.name,
+          phone: preview.phone || '',
+          note: [preview.dealProduct, preview.note].filter(Boolean).join(' – '),
+          date: preview.followUp || '',
+          stage: 'GB',
+          createdAt: now(),
+        }
+        newData = { ...newData, customers: [customer, ...(newData.customers || [])] }
+      }
+    }
+    persist(newData)
     if (preview.followUp && isAppointment) {
       const title = preview.calendarTitle || [preview.name, preview.dealProduct].filter(Boolean).join(' – ') || 'Termin'
       const desc = preview.calendarNote || [
