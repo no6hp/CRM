@@ -1377,6 +1377,7 @@ export default function App() {
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [showApiKey, setShowApiKey] = useState(false)
+  const [showKeyPlain, setShowKeyPlain] = useState(false)
   const [tempKey, setTempKey] = useState('')
   const [period, setPeriod] = useState('all')
   const [recording, setRecording] = useState(false)
@@ -1658,15 +1659,29 @@ export default function App() {
           {/* API Key row */}
           <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: 8, alignItems: isMobile ? 'stretch' : 'center' }}>
             <span style={{ color: '#64748b', fontSize: 13, flexShrink: 0 }}>🔑 Anthropic API-Key:</span>
-            <input
-              type="password"
-              value={tempKey}
-              onChange={(e) => setTempKey(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') saveKey() }}
-              placeholder="sk-ant-api03-…"
-              autoFocus
-              style={{ flex: 1, padding: '9px 12px', borderRadius: 7, border: '1px solid #334155', background: '#0f172a', color: '#e2e8f0', fontSize: 14, outline: 'none' }}
-            />
+            <div style={{ flex: 1, display: 'flex', gap: 6 }}>
+              <input
+                type={showKeyPlain ? 'text' : 'password'}
+                value={tempKey}
+                onChange={(e) => setTempKey(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') saveKey() }}
+                placeholder="sk-ant-api03-…"
+                autoFocus
+                style={{ flex: 1, padding: '9px 12px', borderRadius: 7, border: '1px solid #334155', background: '#0f172a', color: '#e2e8f0', fontSize: 14, outline: 'none', minWidth: 0 }}
+              />
+              <button
+                onClick={() => setShowKeyPlain((v) => !v)}
+                title={showKeyPlain ? 'Verbergen' : 'Anzeigen'}
+                style={{ background: '#1e293b', border: '1px solid #334155', borderRadius: 7, color: '#94a3b8', padding: '0 12px', cursor: 'pointer', fontSize: 16, minHeight: 42, flexShrink: 0 }}
+              >{showKeyPlain ? '🙈' : '👁'}</button>
+              {tempKey && (
+                <button
+                  onClick={() => { navigator.clipboard?.writeText(tempKey); setSuccess('API-Key kopiert ✓'); setTimeout(() => setSuccess(''), 3000) }}
+                  title="Kopieren"
+                  style={{ background: '#1e293b', border: '1px solid #334155', borderRadius: 7, color: '#94a3b8', padding: '0 12px', cursor: 'pointer', fontSize: 16, minHeight: 42, flexShrink: 0 }}
+                >📋</button>
+              )}
+            </div>
             <div style={{ display: 'flex', gap: 8 }}>
               <button onClick={saveKey} style={{ flex: 1, background: '#7c3aed', color: '#fff', border: 'none', borderRadius: 7, padding: '9px 18px', cursor: 'pointer', fontSize: 14, fontWeight: 600, minHeight: 42 }}>
                 Speichern
